@@ -1,0 +1,13 @@
+{
+  "type": "contradiction-demo",
+  "version": "1.0.0",
+  "description": "Test fixture — two identities from one process write the same entity's 'confidence' attribute in opposite directions every tick, on purpose. Not a real Sotrice plugin, just proves Mindmap View's contradiction coloring fires against a real conflict, not just that it renders.",
+  "concepts": [
+    "Contradiction"
+  ],
+  "depends_on": [],
+  "author": "prackoreal",
+  "entry": "contradiction_demo.py",
+  "handles_extensions": [],
+  "ui_controls": []
+}

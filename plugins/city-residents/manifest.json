@@ -1,0 +1,17 @@
+{
+  "type": "city-residents",
+  "version": "1.0.0",
+  "description": "20 residents, each with a home. Decides when to head to a bakery, restaurant, school or park based on city-weather's clock, asks city-routing how to get there, and walks the returned route, speeding up or pausing with the same clock's time-speed control. Requires a Layout source (spy-loader, or a .spy import) and city-routing to already be running.",
+  "concepts": [
+    "Agents"
+  ],
+  "depends_on": [
+    "Layout",
+    "Weather",
+    "Routing"
+  ],
+  "author": "prackoreal",
+  "entry": "city_residents.py",
+  "handles_extensions": [],
+  "ui_controls": []
+}

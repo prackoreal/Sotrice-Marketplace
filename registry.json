@@ -5,92 +5,109 @@
       "type": "coin-flip",
       "version": "1.0.0",
       "description": "Flips a coin once a second and publishes the running heads/tails tally. Marketplace-only — it was never bundled with Sotrice, so downloading it is a real test of install/uninstall, not something that was already there.",
-      "concepts": ["Chance"],
+      "concepts": [
+        "Chance"
+      ],
       "depends_on": [],
       "author": "prackoreal",
-      "entry": "coin_flip.py",
-      "files": ["coin_flip.py", "sotrice_client.py"]
+      "file": "coin-flip.spin"
     },
     {
       "type": "heartbeat",
       "version": "1.0.0",
       "description": "Test fixture for the Launcher — identifies itself and increments a counter until stopped. Not a real Sotrice plugin, just proves start/stop works.",
-      "concepts": ["Heartbeat"],
+      "concepts": [
+        "Heartbeat"
+      ],
       "depends_on": [],
       "author": "prackoreal",
-      "entry": "heartbeat_plugin.py",
-      "files": ["heartbeat_plugin.py", "sotrice_client.py"]
+      "file": "heartbeat.spin"
     },
     {
       "type": "moving-entities",
       "version": "1.0.0",
       "description": "Test fixture — creates a few entities and moves them in circles, with live pause/resume and entity-count controls. Not a real Sotrice plugin, just proves the Simulation View's rendering and controls work against something actually plugged in through the Toolbox, not run on the side from a terminal.",
-      "concepts": ["Movement"],
+      "concepts": [
+        "Movement"
+      ],
       "depends_on": [],
       "author": "prackoreal",
-      "entry": "demo_moving_entities.py",
-      "files": ["demo_moving_entities.py", "sotrice_client.py"]
+      "file": "moving-entities.spin"
     },
     {
       "type": "contradiction-demo",
       "version": "1.0.0",
       "description": "Test fixture — two identities from one process write the same entity's 'confidence' attribute in opposite directions every tick, on purpose. Not a real Sotrice plugin, just proves Mindmap View's contradiction coloring fires against a real conflict, not just that it renders.",
-      "concepts": ["Contradiction"],
+      "concepts": [
+        "Contradiction"
+      ],
       "depends_on": [],
       "author": "prackoreal",
-      "entry": "contradiction_demo.py",
-      "files": ["contradiction_demo.py", "sotrice_client.py"]
+      "file": "contradiction-demo.spin"
     },
     {
       "type": "weather-station",
       "version": "1.0.0",
       "description": "Test fixture — three sensor entities, each independently drifting three attributes (temperature, humidity, wind_speed) at once from a single instance. Not a real Sotrice plugin, just a more complex one to exercise Mindmap View with several variables in sync, whole-plugin enable/disable across many attributes at once, and despawn across several entities from one unplug.",
-      "concepts": ["Sensors"],
+      "concepts": [
+        "Sensors"
+      ],
       "depends_on": [],
       "author": "prackoreal",
-      "entry": "weather_station.py",
-      "files": ["weather_station.py", "sotrice_client.py"]
+      "file": "weather-station.spin"
     },
     {
       "type": "city-weather",
       "version": "1.0.0",
       "description": "Local, deliberately exaggerated weather: occasional rain that targets one specific lane of city-layout's 3-lane bypass, plus the shared simulated clock (city_hour) and time-speed control that drives resident behavior like the morning bakery rush.",
-      "concepts": ["Weather"],
-      "depends_on": ["Layout"],
+      "concepts": [
+        "Weather"
+      ],
+      "depends_on": [
+        "Layout"
+      ],
       "author": "prackoreal",
-      "entry": "city_weather.py",
-      "files": ["city_weather.py", "city_layout.py", "sotrice_client.py"]
+      "file": "city-weather.spin"
     },
     {
       "type": "city-routing",
       "version": "1.0.0",
       "description": "Reads city-layout's road graph and city-weather's zones, then answers 'how do I get there' for residents purely through Attributes — a resident sets desired_destination on itself, this plugin computes a path (weighing live congestion and bad weather) and writes route back. No direct calls between plugins, just Core relay.",
-      "concepts": ["Routing"],
-      "depends_on": ["Layout", "Weather"],
+      "concepts": [
+        "Routing"
+      ],
+      "depends_on": [
+        "Layout",
+        "Weather"
+      ],
       "author": "prackoreal",
-      "entry": "city_routing.py",
-      "files": ["city_routing.py", "city_layout.py", "sotrice_client.py"]
+      "file": "city-routing.spin"
     },
     {
       "type": "city-residents",
       "version": "1.0.0",
       "description": "20 residents, each with a home. Decides when to head to a bakery, restaurant, school or park based on city-weather's clock, asks city-routing how to get there, and walks the returned route, speeding up or pausing with the same clock's time-speed control. Requires a Layout source (spy-loader, or a .spy import) and city-routing to already be running.",
-      "concepts": ["Agents"],
-      "depends_on": ["Layout", "Weather", "Routing"],
+      "concepts": [
+        "Agents"
+      ],
+      "depends_on": [
+        "Layout",
+        "Weather",
+        "Routing"
+      ],
       "author": "prackoreal",
-      "entry": "city_residents.py",
-      "files": ["city_residents.py", "city_layout.py", "sotrice_client.py"]
+      "file": "city-residents.spin"
     },
     {
       "type": "spy-loader",
       "version": "1.0.0",
       "description": "Drag this in like any other plugin, then drag a .spy file (imported earlier through the Files panel) onto its own canvas widget to load it. Publishes into the Core using the exact same attribute vocabulary the city plugins already use, so city-weather, city-routing, and city-residents recognize its buildings and roads with zero changes to any of them. Loading is additive — feed it several files over its lifetime, unplugging it despawns everything it ever loaded, in one action, same as any other plugin.",
-      "concepts": ["Layout"],
+      "concepts": [
+        "Layout"
+      ],
       "depends_on": [],
       "author": "prackoreal",
-      "entry": "spy_loader.py",
-      "files": ["spy_loader.py", "city_layout.py", "sotrice_client.py"],
-      "handles_extensions": [".spy"]
+      "file": "spy-loader.spin"
     }
   ]
 }

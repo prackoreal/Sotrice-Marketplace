@@ -1,0 +1,16 @@
+{
+  "type": "city-routing",
+  "version": "1.0.0",
+  "description": "Reads city-layout's road graph and city-weather's zones, then answers 'how do I get there' for residents purely through Attributes — a resident sets desired_destination on itself, this plugin computes a path (weighing live congestion and bad weather) and writes route back. No direct calls between plugins, just Core relay.",
+  "concepts": [
+    "Routing"
+  ],
+  "depends_on": [
+    "Layout",
+    "Weather"
+  ],
+  "author": "prackoreal",
+  "entry": "city_routing.py",
+  "handles_extensions": [],
+  "ui_controls": []
+}

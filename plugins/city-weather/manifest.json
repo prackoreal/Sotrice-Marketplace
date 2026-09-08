@@ -1,0 +1,17 @@
+{
+  "type": "city-weather",
+  "version": "1.0.0",
+  "description": "Local, deliberately exaggerated weather: occasional rain that targets one specific lane of city-layout's 3-lane bypass, plus the shared simulated clock (city_hour) and time-speed control that drives resident behavior like the morning bakery rush.",
+  "concepts": [
+    "Weather"
+  ],
+  "depends_on": [
+    "Layout"
+  ],
+  "author": "prackoreal",
+  "entry": "city_weather.py",
+  "handles_extensions": [],
+  "ui_controls": [
+    "clock"
+  ]
+}

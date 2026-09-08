@@ -1,0 +1,15 @@
+{
+  "type": "spy-loader",
+  "version": "1.0.0",
+  "description": "Drag this in like any other plugin, then drag a .spy file (imported earlier through the Files panel) onto its own canvas widget to load it. Publishes into the Core using the exact same attribute vocabulary the city plugins already use, so city-weather, city-routing, and city-residents recognize its buildings and roads with zero changes to any of them. Loading is additive — feed it several files over its lifetime, unplugging it despawns everything it ever loaded, in one action, same as any other plugin.",
+  "concepts": [
+    "Layout"
+  ],
+  "depends_on": [],
+  "author": "prackoreal",
+  "entry": "spy_loader.py",
+  "handles_extensions": [
+    ".spy"
+  ],
+  "ui_controls": []
+}
