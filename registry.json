@@ -2,6 +2,16 @@
   "schema": 1,
   "plugins": [
     {
+      "type": "coin-flip",
+      "version": "1.0.0",
+      "description": "Flips a coin once a second and publishes the running heads/tails tally. Marketplace-only — it was never bundled with Sotrice, so downloading it is a real test of install/uninstall, not something that was already there.",
+      "concepts": ["Chance"],
+      "depends_on": [],
+      "author": "prackoreal",
+      "entry": "coin_flip.py",
+      "files": ["coin_flip.py", "sotrice_client.py"]
+    },
+    {
       "type": "heartbeat",
       "version": "1.0.0",
       "description": "Test fixture for the Launcher — identifies itself and increments a counter until stopped. Not a real Sotrice plugin, just proves start/stop works.",
