@@ -1,4 +1,4 @@
 {
-  "version": "0.1.2",
-  "notes": "Toolbox grouping + hide, Simulation View pan/zoom/minimap, drag-and-drop fix, update-check banner."
+  "version": "0.1.3",
+  "notes": "Behavior toggles (e.g. residents' Avoid rain), weather/residents bug fixes, test-plugin cleanup, single-installer switch."
 }
