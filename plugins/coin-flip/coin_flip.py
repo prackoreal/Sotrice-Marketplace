@@ -25,6 +25,7 @@ with World() as world:
         world.set_many([
             (entity, "heads_count", heads),
             (entity, "tails_count", tails),
+            (entity, "flip_count", heads + tails),
         ])
         print(f"[{name}] heads={heads} tails={tails}", flush=True)
         time.sleep(1)
