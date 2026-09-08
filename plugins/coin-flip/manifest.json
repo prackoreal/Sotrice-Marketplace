@@ -1,6 +1,6 @@
 {
   "type": "coin-flip",
-  "version": "1.1.0",
+  "version": "1.0.1",
   "description": "Flips a coin once a second and publishes the running heads/tails tally, plus a total flip_count. Marketplace-only — it was never bundled with Sotrice, so downloading it is a real test of install/uninstall, not something that was already there.",
   "concepts": [
     "Chance"
