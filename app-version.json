@@ -1,4 +1,4 @@
 {
-  "version": "0.1.5",
-  "notes": "Free-form draggable Plugin Canvas with Scratch-style spin grouping (drag one out of a group to switch it off, drag it back to reactivate), undo/redo, a real 3D city view with a 2D/3D toggle, the city package in the Marketplace (one download for spy-loader + city-weather + city-routing + city-residents, grouped automatically), plus mindmap/minimap/marketplace bug fixes."
+  "version": "0.1.6",
+  "notes": "Fixes real bugs from live testing: 3D-then-back-to-2D was silently breaking 2D zoom and rendering, the minimap drag had a timing race, trackpad zoom was wildly oversensitive, the mindmap 'updates/min' tooltip froze while hovering, and the Settings dialog's width override never actually applied. Packages (the city package) now arrive collapsed as one card you extend to see the pieces inside."
 }
