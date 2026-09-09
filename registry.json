@@ -54,5 +54,13 @@
       "author": "prackoreal",
       "file": "spy-loader.spin"
     }
+  ],
+  "packages": [
+    {
+      "name": "city",
+      "version": "1.0.0",
+      "description": "The whole city simulation in one download: a layout source, weather and a shared clock, routing, and the residents who actually walk around and react to all three. Installs all four; they land on the canvas already grouped together, like puzzle pieces — drag one out of the group to switch it off without deleting it, drag it back in to reactivate it.",
+      "includes": ["spy-loader", "city-weather", "city-routing", "city-residents"]
+    }
   ]
 }
