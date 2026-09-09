@@ -1,4 +1,4 @@
 {
-  "version": "0.1.3",
-  "notes": "Behavior toggles (e.g. residents' Avoid rain), weather/residents bug fixes, test-plugin cleanup, single-installer switch."
+  "version": "0.1.5",
+  "notes": "Free-form draggable Plugin Canvas with Scratch-style spin grouping (drag one out of a group to switch it off, drag it back to reactivate), undo/redo, a real 3D city view with a 2D/3D toggle, the city package in the Marketplace (one download for spy-loader + city-weather + city-routing + city-residents, grouped automatically), plus mindmap/minimap/marketplace bug fixes."
 }
