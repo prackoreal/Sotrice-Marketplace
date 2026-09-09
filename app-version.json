@@ -1,4 +1,4 @@
 {
-  "version": "0.1.7",
-  "notes": "Fixes 'Avoid rain' only ever affecting city-residents — city-routing now honors the same toggle instead of always routing around bad weather regardless of it. Fixes picking up a grouped spin visually teleporting to a stale position instead of starting where it actually was. The minimap now shows whichever view (2D/3D) the main view ISN'T currently in, instead of mirroring the same one."
+  "version": "0.1.8",
+  "notes": "The minimap is now a genuinely live, fully interactive second viewport (drag/pan/zoom/orbit it directly, same as the main one) instead of a passive mirror or preview — both 2D and 3D run continuously all the time, one big and one small, and switching which is which never resets either one's camera/pan state. Also fixes Settings dialog text spilling past its right edge."
 }
