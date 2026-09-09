@@ -1,4 +1,4 @@
 {
-  "version": "0.1.6",
-  "notes": "Fixes real bugs from live testing: 3D-then-back-to-2D was silently breaking 2D zoom and rendering, the minimap drag had a timing race, trackpad zoom was wildly oversensitive, the mindmap 'updates/min' tooltip froze while hovering, and the Settings dialog's width override never actually applied. Packages (the city package) now arrive collapsed as one card you extend to see the pieces inside."
+  "version": "0.1.7",
+  "notes": "Fixes 'Avoid rain' only ever affecting city-residents — city-routing now honors the same toggle instead of always routing around bad weather regardless of it. Fixes picking up a grouped spin visually teleporting to a stale position instead of starting where it actually was. The minimap now shows whichever view (2D/3D) the main view ISN'T currently in, instead of mirroring the same one."
 }
