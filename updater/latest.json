@@ -1,0 +1,12 @@
+{
+  "version": "0.1.8",
+  "notes": "",
+  "pub_date": "2026-09-10T00:00:00Z",
+  "platforms": {
+    "windows-x86_64": { "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases", "signature": "" },
+    "windows-x86_64-nsis": { "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases", "signature": "" },
+    "darwin-x86_64": { "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases", "signature": "" },
+    "darwin-aarch64": { "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases", "signature": "" },
+    "linux-x86_64": { "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases", "signature": "" }
+  }
+}
