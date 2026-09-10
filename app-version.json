@@ -1,4 +1,4 @@
 {
-  "version": "0.1.8",
-  "notes": "The minimap is now a genuinely live, fully interactive second viewport (drag/pan/zoom/orbit it directly, same as the main one) instead of a passive mirror or preview — both 2D and 3D run continuously all the time, one big and one small, and switching which is which never resets either one's camera/pan state. Also fixes Settings dialog text spilling past its right edge."
+  "version": "0.1.9",
+  "notes": "Toolbox and Marketplace now correctly group the math plugin (and any future package) as one block instead of showing its members separately or picking one as the group's head. Also the first release with a real, signature-verified in-app auto-updater -- check Settings for manual/automatic update mode."
 }
