@@ -1,0 +1,16 @@
+{
+  "type": "math-teacher",
+  "version": "0.1.0",
+  "description": "First slice of the math spin: broadcasts one multiple-choice question at a time from a small built-in bank (no real teacher UI to author questions yet), advancing automatically every 20s, and tallies live how many students currently have each option selected for the current question. Install math-student alongside it to see the tally move.",
+  "concepts": [
+    "MathClass"
+  ],
+  "depends_on": [],
+  "author": "prackoreal",
+  "entry": "math_teacher.py",
+  "handles_extensions": [],
+  "ui_controls": [
+    "math_class"
+  ],
+  "package": "Math Plugin"
+}

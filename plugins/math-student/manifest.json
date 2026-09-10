@@ -1,0 +1,16 @@
+{
+  "type": "math-student",
+  "version": "0.1.0",
+  "description": "One simulated student in a math-teacher class: watches the current question and answers after a short random 'thinking' delay, standing in for a real student clicking an option until there's a real UI for it. Install several instances to populate math-teacher's live tally.",
+  "concepts": [
+    "Students"
+  ],
+  "depends_on": [
+    "MathClass"
+  ],
+  "author": "prackoreal",
+  "entry": "math_student.py",
+  "handles_extensions": [],
+  "ui_controls": [],
+  "package": "Math Plugin"
+}

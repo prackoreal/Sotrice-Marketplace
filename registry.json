@@ -44,6 +44,30 @@
       "file": "city-residents.spin"
     },
     {
+      "type": "math-teacher",
+      "version": "0.1.0",
+      "description": "First slice of the math spin: broadcasts one multiple-choice question at a time from a small built-in bank (no real teacher UI to author questions yet), advancing automatically every 20s, and tallies live how many students currently have each option selected for the current question. Install math-student alongside it to see the tally move.",
+      "concepts": [
+        "MathClass"
+      ],
+      "depends_on": [],
+      "author": "prackoreal",
+      "file": "math-teacher.spin"
+    },
+    {
+      "type": "math-student",
+      "version": "0.1.0",
+      "description": "One simulated student in a math-teacher class: watches the current question and answers after a short random 'thinking' delay, standing in for a real student clicking an option until there's a real UI for it. Install several instances to populate math-teacher's live tally.",
+      "concepts": [
+        "Students"
+      ],
+      "depends_on": [
+        "MathClass"
+      ],
+      "author": "prackoreal",
+      "file": "math-student.spin"
+    },
+    {
       "type": "spy-loader",
       "version": "1.0.0",
       "description": "Drag this in like any other plugin, then drag a .spy file (imported earlier through the Files panel) onto its own canvas widget to load it. Publishes into the Core using the exact same attribute vocabulary the city plugins already use, so city-weather, city-routing, and city-residents recognize its buildings and roads with zero changes to any of them. Loading is additive — feed it several files over its lifetime, unplugging it despawns everything it ever loaded, in one action, same as any other plugin.",
@@ -61,6 +85,12 @@
       "version": "1.0.0",
       "description": "The whole city simulation in one download: a layout source, weather and a shared clock, routing, and the residents who actually walk around and react to all three. Installs all four; they land on the canvas already grouped together, like puzzle pieces — drag one out of the group to switch it off without deleting it, drag it back in to reactivate it.",
       "includes": ["spy-loader", "city-weather", "city-routing", "city-residents"]
+    },
+    {
+      "name": "Math Plugin",
+      "version": "0.1.0",
+      "description": "The math spin's first slice: a teacher broadcasts one multiple-choice question at a time, students answer, a live tally shows on screen. Installs both math-teacher and math-student; they land on the canvas already grouped as one block.",
+      "includes": ["math-teacher", "math-student"]
     }
   ]
 }
