@@ -17,7 +17,7 @@
     {
       "type": "city-routing",
       "version": "1.0.0",
-      "description": "Reads city-layout's road graph and city-weather's zones, then answers 'how do I get there' for residents purely through Attributes — a resident sets desired_destination on itself, this plugin computes a path (weighing live congestion and bad weather) and writes route back. No direct calls between plugins, just Core relay.",
+      "description": "Reads city-layout's road graph and city-weather's zones, then answers 'how do I get there' for residents purely through Attributes \u2014 a resident sets desired_destination on itself, this plugin computes a path (weighing live congestion and bad weather) and writes route back. No direct calls between plugins, just Core relay.",
       "concepts": [
         "Routing"
       ],
@@ -45,8 +45,8 @@
     },
     {
       "type": "math-teacher",
-      "version": "0.1.0",
-      "description": "First slice of the math spin: broadcasts one multiple-choice question at a time from a small built-in bank (no real teacher UI to author questions yet), advancing automatically every 20s, and tallies live how many students currently have each option selected for the current question. Install math-student alongside it to see the tally move.",
+      "version": "0.2.0",
+      "description": "Broadcasts a multiple-choice question and tallies live answers. Now with adaptive per-student difficulty (off by default; teacher-toggleable automatic/manual), a correctness streak and opt-in scoreboard per student, and live mid-session editing (replace the current question, skip ahead, or extend the timer) via a teacher_command control attribute. No real teacher UI yet -- all of this is driven by attributes for now. Install math-student alongside it to see the tally move.",
       "concepts": [
         "MathClass"
       ],
@@ -56,8 +56,8 @@
     },
     {
       "type": "math-student",
-      "version": "0.1.0",
-      "description": "One simulated student in a math-teacher class: watches the current question and answers after a short random 'thinking' delay, standing in for a real student clicking an option until there's a real UI for it. Install several instances to populate math-teacher's live tally.",
+      "version": "0.2.0",
+      "description": "One simulated student in a math-teacher class: watches its assigned question (tiered if the teacher's adaptive difficulty is on) and answers after a short random 'thinking' delay, standing in for a real student clicking an option until there's a real UI for it. Also reads its own streak and the class scoreboard when the teacher enables it. Install several instances to populate math-teacher's live tally.",
       "concepts": [
         "Students"
       ],
@@ -70,7 +70,7 @@
     {
       "type": "spy-loader",
       "version": "1.0.0",
-      "description": "Drag this in like any other plugin, then drag a .spy file (imported earlier through the Files panel) onto its own canvas widget to load it. Publishes into the Core using the exact same attribute vocabulary the city plugins already use, so city-weather, city-routing, and city-residents recognize its buildings and roads with zero changes to any of them. Loading is additive — feed it several files over its lifetime, unplugging it despawns everything it ever loaded, in one action, same as any other plugin.",
+      "description": "Drag this in like any other plugin, then drag a .spy file (imported earlier through the Files panel) onto its own canvas widget to load it. Publishes into the Core using the exact same attribute vocabulary the city plugins already use, so city-weather, city-routing, and city-residents recognize its buildings and roads with zero changes to any of them. Loading is additive \u2014 feed it several files over its lifetime, unplugging it despawns everything it ever loaded, in one action, same as any other plugin.",
       "concepts": [
         "Layout"
       ],
@@ -83,14 +83,22 @@
     {
       "name": "city",
       "version": "1.0.0",
-      "description": "The whole city simulation in one download: a layout source, weather and a shared clock, routing, and the residents who actually walk around and react to all three. Installs all four; they land on the canvas already grouped together, like puzzle pieces — drag one out of the group to switch it off without deleting it, drag it back in to reactivate it.",
-      "includes": ["spy-loader", "city-weather", "city-routing", "city-residents"]
+      "description": "The whole city simulation in one download: a layout source, weather and a shared clock, routing, and the residents who actually walk around and react to all three. Installs all four; they land on the canvas already grouped together, like puzzle pieces \u2014 drag one out of the group to switch it off without deleting it, drag it back in to reactivate it.",
+      "includes": [
+        "spy-loader",
+        "city-weather",
+        "city-routing",
+        "city-residents"
+      ]
     },
     {
       "name": "Math Plugin",
       "version": "0.1.0",
       "description": "The math spin's first slice: a teacher broadcasts one multiple-choice question at a time, students answer, a live tally shows on screen. Installs both math-teacher and math-student; they land on the canvas already grouped as one block.",
-      "includes": ["math-teacher", "math-student"]
+      "includes": [
+        "math-teacher",
+        "math-student"
+      ]
     }
   ]
 }

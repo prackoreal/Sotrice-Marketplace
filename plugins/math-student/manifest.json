@@ -1,7 +1,7 @@
 {
   "type": "math-student",
-  "version": "0.1.0",
-  "description": "One simulated student in a math-teacher class: watches the current question and answers after a short random 'thinking' delay, standing in for a real student clicking an option until there's a real UI for it. Install several instances to populate math-teacher's live tally.",
+  "version": "0.2.0",
+  "description": "One simulated student in a math-teacher class: watches its assigned question (tiered if the teacher's adaptive difficulty is on) and answers after a short random 'thinking' delay, standing in for a real student clicking an option until there's a real UI for it. Also reads its own streak and the class scoreboard when the teacher enables it. Install several instances to populate math-teacher's live tally.",
   "concepts": [
     "Students"
   ],

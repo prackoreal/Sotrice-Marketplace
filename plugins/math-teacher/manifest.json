@@ -1,7 +1,7 @@
 {
   "type": "math-teacher",
-  "version": "0.1.0",
-  "description": "First slice of the math spin: broadcasts one multiple-choice question at a time from a small built-in bank (no real teacher UI to author questions yet), advancing automatically every 20s, and tallies live how many students currently have each option selected for the current question. Install math-student alongside it to see the tally move.",
+  "version": "0.2.0",
+  "description": "Broadcasts a multiple-choice question and tallies live answers. Now with adaptive per-student difficulty (off by default; teacher-toggleable automatic/manual), a correctness streak and opt-in scoreboard per student, and live mid-session editing (replace the current question, skip ahead, or extend the timer) via a teacher_command control attribute. No real teacher UI yet -- all of this is driven by attributes for now. Install math-student alongside it to see the tally move.",
   "concepts": [
     "MathClass"
   ],
