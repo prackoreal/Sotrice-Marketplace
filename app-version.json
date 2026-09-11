@@ -1,4 +1,4 @@
 {
-  "version": "0.1.14",
-  "notes": "The connected/disconnected indicator now lives only in Settings (Connection section), not the top bar. The bottom Process Log bar can fully hide now, not just collapse to a thin strip. Fixes the group-drag ghost preview for a hand-built group of unrelated plugins, not just ones sharing a Marketplace package. No more blank white flash when the app launches."
+  "version": "0.1.15",
+  "notes": "Fixes the real cause behind Sotrice repeatedly failing to reopen after an update or crash: a leftover background server process from the previous session would keep holding the connection ports, leaving nothing for the fresh launch to actually talk to. Every launch now checks for and clears away that kind of leftover before starting its own, no matter how the previous session ended -- reproduced the exact stuck scenario on purpose and confirmed it now recovers cleanly."
 }
