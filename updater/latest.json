@@ -1,15 +1,15 @@
 {
-  "version": "0.1.10",
-  "notes": "Real math-teacher dashboard and math-student class view. Package chips draggable onto canvas. City plugin group now shows a proper title card, plus two real city-simulation bugs fixed. Minimap hover/drag polish.",
-  "pub_date": "2026-09-11T02:08:00Z",
+  "version": "0.1.11",
+  "notes": "Persistent update control (top bar + Settings, same button, shows up only when there's something to do). Fixes a visible flash when unplugging a whole group.",
+  "pub_date": "2026-09-11T03:22:00Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.10/Sotrice_0.1.10_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY1BrQ2dMS3hVUFhYazJDQWxUeDZFM2N2bnhsOGdmVjRjN3BIbHVjUXhRaU1OcXFEaW9vYmE4VFoybWxzS1VSbEZiYzNOWjdKM3ozWlZTbDVqMjZucmdRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MDg1Mjk1CWZpbGU6U290cmljZV8wLjEuMTBfeDY0LXNldHVwLmV4ZQpkT1pKUi80c3ZmdWNQelJMVDdvSmMvczN0bnpiZjlJSzdMUy83TDhaVFdsNU4vSzhIMVlOcm5Qd3FZbXlwNHYwWllSLzdwVjg3c292UnBDQU1IK2RBUT09Cg=="
+      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.11/Sotrice_0.1.11_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0swUjFQaXFuWEl6bE1XczRkWVpMelRPWlNzZE1LOVkweWsvQ0tIQlpCa2JBZkUxMWVDS2VyRXoxNWxCckJmR3RRTzcxQ2dXVG9pVHdlM0VqM2hwaWd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MTE1MzU2CWZpbGU6U290cmljZV8wLjEuMTFfeDY0LXNldHVwLmV4ZQpGdi91K1R1N1NZOTMzdmRrd1pNdXBZT3dEL3N2RFhoazRDNm1lOEpESG1VRFFvMmo4b3VWMWRvL3l6dUxGQ1FreExJb1g2NkRDbk55WWVidkdEclNBQT09Cg=="
     },
     "windows-x86_64-nsis": {
-      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.10/Sotrice_0.1.10_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY1BrQ2dMS3hVUFhYazJDQWxUeDZFM2N2bnhsOGdmVjRjN3BIbHVjUXhRaU1OcXFEaW9vYmE4VFoybWxzS1VSbEZiYzNOWjdKM3ozWlZTbDVqMjZucmdRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MDg1Mjk1CWZpbGU6U290cmljZV8wLjEuMTBfeDY0LXNldHVwLmV4ZQpkT1pKUi80c3ZmdWNQelJMVDdvSmMvczN0bnpiZjlJSzdMUy83TDhaVFdsNU4vSzhIMVlOcm5Qd3FZbXlwNHYwWllSLzdwVjg3c292UnBDQU1IK2RBUT09Cg=="
+      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.11/Sotrice_0.1.11_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0swUjFQaXFuWEl6bE1XczRkWVpMelRPWlNzZE1LOVkweWsvQ0tIQlpCa2JBZkUxMWVDS2VyRXoxNWxCckJmR3RRTzcxQ2dXVG9pVHdlM0VqM2hwaWd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MTE1MzU2CWZpbGU6U290cmljZV8wLjEuMTFfeDY0LXNldHVwLmV4ZQpGdi91K1R1N1NZOTMzdmRrd1pNdXBZT3dEL3N2RFhoazRDNm1lOEpESG1VRFFvMmo4b3VWMWRvL3l6dUxGQ1FreExJb1g2NkRDbk55WWVidkdEclNBQT09Cg=="
     },
     "darwin-x86_64": { "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases", "signature": "" },
     "darwin-aarch64": { "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases", "signature": "" },
