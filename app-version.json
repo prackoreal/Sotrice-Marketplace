@@ -1,4 +1,4 @@
 {
-  "version": "0.1.12",
-  "notes": "Fixes a bug where dragging a group to reposition it within the canvas could show its plugins separated instead of moving together. Trims over-long tooltips in the Toolbox. Adds an opt-in \"Auto-update plugins\" toggle in Settings so installed Marketplace plugins can stay current on their own."
+  "version": "0.1.13",
+  "notes": "Fixes an update-install deadlock that could leave Sotrice stuck disconnected on \"Updating...\" forever. App updates and plugin auto-update now recheck every 30 minutes while the app is open, not just at launch. Fixes the group-drag preview showing separated plugins mid-drag instead of the collapsed group. Supports snapping the window to half the screen. Explains what the Files panel is for."
 }

@@ -1,15 +1,15 @@
 {
-  "version": "0.1.12",
-  "notes": "Fixes dragging a group within the canvas showing its members separated instead of moving as one. Trims over-long tooltips. Adds an opt-in \"Auto-update plugins\" toggle in Settings.",
-  "pub_date": "2026-09-11T12:20:00Z",
+  "version": "0.1.13",
+  "notes": "Fixes an update-install deadlock (could get stuck disconnected on \"Updating...\" forever). Updates and plugin auto-update now recheck every 30 minutes while open. Fixes the group-drag ghost preview showing separated plugins mid-drag. Supports half-screen window snapping.",
+  "pub_date": "2026-09-11T13:36:00Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.12/Sotrice_0.1.12_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0s1eWMyazY4emZzang4RGRXa3BLYmZXN0o4MEtrS0RTQ1JzUCtiZVNWc3o0WmtrY21MWUFYNG5OS1pCQjR1dS8xdnhGMk85QloyTXBRMjlOSjNRNFE0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MTIxNzgzCWZpbGU6U290cmljZV8wLjEuMTJfeDY0LXNldHVwLmV4ZQpnWWNFeml0dUg1Tnlqa28rYjlxMk50cnFydjY5L3ZsTk1OemtWeTVkQ3Fna2UxR25pR3k2NGlqaHl0ZFF0WGRHUFJoMW9pcVh3Y2tFR3AzWTdXTHZCUT09Cg=="
+      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.13/Sotrice_0.1.13_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0lXZUJDNjByUG5mVHRVeS9JZmJCeEpwbFp3dlJIZG9uRzBxL2RVOGlRRjc1bnRUQlBabmFSQnZ6VlRIVkVSdlR2VEJQM2VKeGNTNHFJcTYxQWtZdWdvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MTI2NTcyCWZpbGU6U290cmljZV8wLjEuMTNfeDY0LXNldHVwLmV4ZQpnbUJQaU11azJRMTUrcTBUWWtGamQwYnlZWGhVVGZaMTZaRVdYVkdOWGZ4S1FIRDZDTGpJNE84bmRRclRweUNzQ0ZacjhGSUQ5STBSVzVOREp5eGFEZz09Cg=="
     },
     "windows-x86_64-nsis": {
-      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.12/Sotrice_0.1.12_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0s1eWMyazY4emZzang4RGRXa3BLYmZXN0o4MEtrS0RTQ1JzUCtiZVNWc3o0WmtrY21MWUFYNG5OS1pCQjR1dS8xdnhGMk85QloyTXBRMjlOSjNRNFE0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MTIxNzgzCWZpbGU6U290cmljZV8wLjEuMTJfeDY0LXNldHVwLmV4ZQpnWWNFeml0dUg1Tnlqa28rYjlxMk50cnFydjY5L3ZsTk1OemtWeTVkQ3Fna2UxR25pR3k2NGlqaHl0ZFF0WGRHUFJoMW9pcVh3Y2tFR3AzWTdXTHZCUT09Cg=="
+      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.13/Sotrice_0.1.13_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0lXZUJDNjByUG5mVHRVeS9JZmJCeEpwbFp3dlJIZG9uRzBxL2RVOGlRRjc1bnRUQlBabmFSQnZ6VlRIVkVSdlR2VEJQM2VKeGNTNHFJcTYxQWtZdWdvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MTI2NTcyCWZpbGU6U290cmljZV8wLjEuMTNfeDY0LXNldHVwLmV4ZQpnbUJQaU11azJRMTUrcTBUWWtGamQwYnlZWGhVVGZaMTZaRVdYVkdOWGZ4S1FIRDZDTGpJNE84bmRRclRweUNzQ0ZacjhGSUQ5STBSVzVOREp5eGFEZz09Cg=="
     },
     "darwin-x86_64": { "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases", "signature": "" },
     "darwin-aarch64": { "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases", "signature": "" },
