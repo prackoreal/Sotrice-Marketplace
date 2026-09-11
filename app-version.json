@@ -1,4 +1,4 @@
 {
-  "version": "0.1.13",
-  "notes": "Fixes an update-install deadlock that could leave Sotrice stuck disconnected on \"Updating...\" forever. App updates and plugin auto-update now recheck every 30 minutes while the app is open, not just at launch. Fixes the group-drag preview showing separated plugins mid-drag instead of the collapsed group. Supports snapping the window to half the screen. Explains what the Files panel is for."
+  "version": "0.1.14",
+  "notes": "The connected/disconnected indicator now lives only in Settings (Connection section), not the top bar. The bottom Process Log bar can fully hide now, not just collapse to a thin strip. Fixes the group-drag ghost preview for a hand-built group of unrelated plugins, not just ones sharing a Marketplace package. No more blank white flash when the app launches."
 }
