@@ -1,4 +1,4 @@
 {
-  "version": "0.1.11",
-  "notes": "The update banner is gone -- there's now a persistent update button (top bar, only when there's something to do; Settings' Updates section, always there for a manual check). Also fixes a visible flash when unplugging a whole group of spins at once."
+  "version": "0.1.12",
+  "notes": "Fixes a bug where dragging a group to reposition it within the canvas could show its plugins separated instead of moving together. Trims over-long tooltips in the Toolbox. Adds an opt-in \"Auto-update plugins\" toggle in Settings so installed Marketplace plugins can stay current on their own."
 }
