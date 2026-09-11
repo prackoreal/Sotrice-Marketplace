@@ -1,4 +1,4 @@
 {
-  "version": "0.1.9",
-  "notes": "Toolbox and Marketplace now correctly group the math plugin (and any future package) as one block instead of showing its members separately or picking one as the group's head. Also the first release with a real, signature-verified in-app auto-updater -- check Settings for manual/automatic update mode."
+  "version": "0.1.10",
+  "notes": "Real math-teacher dashboard (course material/stats/roster/AI panels, adaptive difficulty + scoreboard + live-edit controls) and a real math-student class view (answer questions directly in the app, avatar picker). Toolbox package chips are now draggable onto the canvas. City's plugin group finally shows a proper title card, and two real city-simulation bugs are fixed (resident count, clock speed dropdown). Minimap hover/drag feel improved."
 }
