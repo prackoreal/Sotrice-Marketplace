@@ -93,8 +93,8 @@
     },
     {
       "name": "Math Plugin",
-      "version": "0.1.0",
-      "description": "The math spin's first slice: a teacher broadcasts one multiple-choice question at a time, students answer, a live tally shows on screen. Installs both math-teacher and math-student; they land on the canvas already grouped as one block.",
+      "version": "0.2.0",
+      "description": "A teacher broadcasts multiple-choice questions (with adaptive per-student difficulty, streaks, an opt-in scoreboard, and live mid-session editing), students answer, a live tally shows on screen. Installs both math-teacher and math-student; they land on the canvas already grouped as one block.",
       "includes": [
         "math-teacher",
         "math-student"
