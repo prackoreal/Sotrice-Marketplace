@@ -1,21 +1,35 @@
 """Math Teacher — the teacher side of the math/education spin's live
 class session: broadcasts question(s), tallies live answers, grades
-them, and now supports adaptive per-student difficulty, a streak/
-scoreboard layer, and teacher live-editing — three features built
-concurrently on top of the original first slice and reconciled here
-into one coherent plugin. Still the exact same Attribute-relay pattern
-every other plugin uses; still deliberately short of the harder pieces
-(handwriting, whiteboard, accounts, class-mode) that get built later.
+them, supports adaptive per-student difficulty, a streak/scoreboard
+layer, teacher live-editing, and now a per-class identity so more than
+one class can run on the same machine at once without their questions/
+answers/rosters bleeding into each other. Still the exact same
+Attribute-relay pattern every other plugin uses; still deliberately
+short of the harder pieces (handwriting, whiteboard, accounts,
+cross-device networking) that get built later.
 
-Backward compatible by construction: with adaptive_mode == "off" (the
-default) and no teacher_command ever sent, this behaves exactly like
-the original single-question first slice — one shared "medium"
-question, one shared tally, question_source always "builtin". Nothing
-that only reads question_text/question_options/question_index/
-answer_tally needs to change.
+Class identity: on start, generates a short CLASS_CODE (see
+generate_class_code) and publishes it bare/unnamespaced as `class_code`
+so a joining window can discover and display it — that one attribute
+is the only thing NOT scoped by itself. Every other attribute this
+plugin reads or writes has the class code baked into its name via
+class_attr(name) -> f"{name}:{class_code}", so two classes running
+concurrently (two separate processes, two separate codes) never see
+each other's questions, answers, or roster. A math_student instance
+(or the real student-facing UI) has to know the same code to talk to
+this specific class at all.
+
+Backward compatible IN SPIRIT only, not by exact attribute name: with
+adaptive_mode == "off" and no teacher_command ever sent, the shape of
+everything published is unchanged from the original single-question
+first slice (one shared "medium" question, one shared tally,
+question_source always "builtin") — but every consumer now has to read
+these under their class_attr(name) form, not the bare name.
 
 Entities published:
-  A single control entity, kind="math_teacher_control":
+  A single control entity, kind="math_class", class_code (str, bare/
+  unnamespaced), class_name (str, bare/unnamespaced):
+    All namespaced via class_attr() below:
     question_text, question_options (list[str]), question_index (int,
       bumps every new round), question_source ("builtin" |
       "teacher_edited") — all mirror whichever tier is DEFAULT_TIER
@@ -49,8 +63,9 @@ Entities published:
       date while enabled; actively cleared to [] the instant it's
       turned off, never populated while off.
 
-Reads (subscribing to a name, not a specific entity — any number of
-math_student instances can exist):
+Reads (subscribing to a class_attr()-scoped name, not a specific
+entity — any number of math_student instances for THIS class can
+exist):
     answer — {"question_index": int, "option": int, "tier": str
     (optional)}. Missing/unknown/inactive "tier" is treated as
     DEFAULT_TIER, which is exactly right for a student that predates
@@ -83,9 +98,21 @@ math_student instances can exist):
 """
 
 import math
+import random
 import time
 
 from sotrice_client import World
+
+# Excludes 0/O/1/I/L -- a code a human has to read off a screen (or a
+# projector) and type back in shouldn't depend on telling those apart
+# in whatever font it's rendered in.
+CLASS_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+CLASS_CODE_LENGTH = 6
+
+
+def generate_class_code() -> str:
+    return "".join(random.choice(CLASS_CODE_ALPHABET) for _ in range(CLASS_CODE_LENGTH))
+
 
 # Each tier is a list of (text, options, correct_option_index). The
 # correct index is never published on any attribute a student can
@@ -160,13 +187,29 @@ MAX_TRACKED_STUDENTS = 200
 
 with World() as world:
     name = world.identify("math-teacher")
+
+    class_code = generate_class_code()
+    class_name = f"Class {class_code}"
+
+    def class_attr(attr_name: str) -> str:
+        """Every class-scoped attribute name goes through this — see
+        the module docstring's "Class identity" section. class_code
+        and class_name themselves are the only two exceptions,
+        published bare so a joining window can discover them at all."""
+        return f"{attr_name}:{class_code}"
+
     print(
-        f"[{name}] math class started, "
+        f"[{name}] math class '{class_name}' started (code {class_code}), "
         f"{sum(len(v) for v in QUESTION_BANK_BY_TIER.values())} questions across {len(TIERS)} tiers",
         flush=True,
     )
 
     control = world.create_entity()
+    world.set_many([
+        (control, "kind", "math_class"),
+        (control, "class_code", class_code),
+        (control, "class_name", class_name),
+    ])
 
     adaptive_mode = "off"
     scoreboard_enabled = False
@@ -277,9 +320,9 @@ with World() as world:
         }
         streak_map = {str(e): stats["streak"] for e, stats in student_stats.items()}
         world.set_many([
-            (control, "student_tier", tier_map),
-            (control, "student_score", score_map),
-            (control, "student_streak", streak_map),
+            (control, class_attr("student_tier"), tier_map),
+            (control, class_attr("student_score"), score_map),
+            (control, class_attr("student_streak"), streak_map),
         ])
         if scoreboard_enabled:
             publish_scoreboard()
@@ -299,7 +342,7 @@ with World() as world:
             for e, stats in student_stats.items()
         ]
         rows.sort(key=lambda row: row["correct"], reverse=True)
-        world.set_attribute(control, "scoreboard", rows)
+        world.set_attribute(control, class_attr("scoreboard"), rows)
 
     def publish_tally():
         tally_by_tier = {
@@ -312,8 +355,8 @@ with World() as world:
                 counts[option] += 1
         mirror_tier = DEFAULT_TIER if DEFAULT_TIER in tally_by_tier else current_active_tiers[0]
         world.set_many([
-            (control, "answer_tally_by_tier", tally_by_tier),
-            (control, "answer_tally", tally_by_tier[mirror_tier]),
+            (control, class_attr("answer_tally_by_tier"), tally_by_tier),
+            (control, class_attr("answer_tally"), tally_by_tier[mirror_tier]),
         ])
 
     def publish_current_round():
@@ -324,12 +367,12 @@ with World() as world:
         mirror_tier = DEFAULT_TIER if DEFAULT_TIER in current_bank_by_tier else current_active_tiers[0]
         mirror = current_bank_by_tier[mirror_tier]
         world.set_many([
-            (control, "question_by_tier", question_by_tier_public),
-            (control, "question_text", mirror["text"]),
-            (control, "question_options", mirror["options"]),
-            (control, "question_source", mirror["source"]),
-            (control, "question_index", round_index),
-            (control, "adaptive_mode", adaptive_mode),
+            (control, class_attr("question_by_tier"), question_by_tier_public),
+            (control, class_attr("question_text"), mirror["text"]),
+            (control, class_attr("question_options"), mirror["options"]),
+            (control, class_attr("question_source"), mirror["source"]),
+            (control, class_attr("question_index"), round_index),
+            (control, class_attr("adaptive_mode"), adaptive_mode),
         ])
 
     def next_question():
@@ -456,7 +499,7 @@ with World() as world:
             # Don't just stop updating it — actively clear it, so a
             # student who already read a stale scoreboard before it
             # was turned off can't keep it around by never re-reading.
-            world.set_attribute(control, "scoreboard", [])
+            world.set_attribute(control, class_attr("scoreboard"), [])
 
     def on_teacher_command(entity, attribute, value, source):
         # Same untrusted-input posture as on_answer above: stands in
@@ -525,16 +568,16 @@ with World() as world:
     # would otherwise reference a name that doesn't exist yet.
     elapsed = 0.0
 
-    world.set_attribute(control, "scoreboard", [])
+    world.set_attribute(control, class_attr("scoreboard"), [])
 
-    world.subscribe("answer", on_answer, replay=True)
-    world.subscribe("adaptive_mode", on_adaptive_mode_external, replay=False)
-    world.subscribe("student_tier", on_student_tier_external, replay=False)
-    world.subscribe("scoreboard_enabled", on_scoreboard_enabled_external, replay=False)
+    world.subscribe(class_attr("answer"), on_answer, replay=True)
+    world.subscribe(class_attr("adaptive_mode"), on_adaptive_mode_external, replay=False)
+    world.subscribe(class_attr("student_tier"), on_student_tier_external, replay=False)
+    world.subscribe(class_attr("scoreboard_enabled"), on_scoreboard_enabled_external, replay=False)
     # replay=False — a command is a one-shot action ("advance now",
     # "here's an edit"), not persistent state to replay to a
     # late-joining subscriber the way "answer" and question_* are.
-    world.subscribe("teacher_command", on_teacher_command, replay=False)
+    world.subscribe(class_attr("teacher_command"), on_teacher_command, replay=False)
 
     next_question()
     try:
@@ -552,32 +595,30 @@ with World() as world:
 #
 # Every input this file actually receives from the outside — "answer",
 # "adaptive_mode", "student_tier", "scoreboard_enabled", and
-# "teacher_command" — is validated and bounded above: shape-checked,
-# range-checked against the actual active question for a given tier,
-# capped at MAX_TRACKED_STUDENTS via ensure_student (the single gate
-# every per-student dict is populated through), constrained to the
-# fixed ADAPTIVE_MODES/TIERS enums rather than accepting arbitrary
-# strings, and length/type/range-checked for teacher_command
-# specifically before ever touching current_bank_by_tier or elapsed.
-# That covers what a malformed or hostile payload could do to THIS
-# plugin's own logic.
+# "teacher_command" (all class_attr()-scoped) — is validated and
+# bounded above: shape-checked, range-checked against the actual active
+# question for a given tier, capped at MAX_TRACKED_STUDENTS via
+# ensure_student (the single gate every per-student dict is populated
+# through), constrained to the fixed ADAPTIVE_MODES/TIERS enums rather
+# than accepting arbitrary strings, and length/type/range-checked for
+# teacher_command specifically before ever touching current_bank_by_tier
+# or elapsed. That covers what a malformed or hostile payload could do
+# to THIS plugin's own logic.
 #
-# It does NOT cover the real question: right now, sotrice-server has
-# no concept of identity or permission at all — any process that can
-# reach its port can call identify("math-student") (or any other
-# type), or just start writing attributes directly with no identify()
-# call at all, including question_text/question_options/answer_tally/
-# adaptive_mode/student_tier/teacher_command themselves (nothing stops
-# a connected client from impersonating the teacher). That's an
-# accepted, deliberate tradeoff for a single-user local simulation
-# sandbox — every existing plugin already relies on "any plugin can
-# read/write any attribute" as a FEATURE, not a bug.
+# The class_code namespacing (see the module docstring) keeps two
+# concurrent classes' DATA separate on the same local server, but it is
+# NOT an access-control mechanism — knowing (or guessing) a 6-character
+# code is all it takes to read or write that class's attributes, same
+# trust level as everything else here. That's fine for what this is:
+# every existing plugin already relies on "any plugin can read/write
+# any attribute" as a FEATURE, not a bug, and sotrice-server has no
+# concept of identity or permission at all yet — any process that can
+# reach its port can call identify("math-student") (or any other type),
+# or just start writing attributes directly with no identify() call.
 #
 # It stops being acceptable the moment a real student's own device
 # connects over a real network instead of a locally co-located trusted
-# process — which is the explicit plan for this spin (see the
-# class-mode/accounts design). Authentication and per-connection
-# authorization need to be designed into the Core/server before that
-# happens, not bolted onto this file — this file has nothing to add on
-# top of a properly authenticated connection, and nothing it does can
-# substitute for one.
+# process. Authentication and per-connection authorization need to be
+# designed into the Core/server before that happens, not bolted onto
+# this file — this file has nothing to add on top of a properly
+# authenticated connection, and nothing it does can substitute for one.
