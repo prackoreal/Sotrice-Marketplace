@@ -1,4 +1,4 @@
 {
-  "version": "0.1.15",
-  "notes": "Fixes the real cause behind Sotrice repeatedly failing to reopen after an update or crash: a leftover background server process from the previous session would keep holding the connection ports, leaving nothing for the fresh launch to actually talk to. Every launch now checks for and clears away that kind of leftover before starting its own, no matter how the previous session ended -- reproduced the exact stuck scenario on purpose and confirmed it now recovers cleanly."
+  "version": "0.1.16",
+  "notes": "Adds an always-on crash log written next to the app itself. Release builds had zero panic visibility until now -- if Sotrice ever vanishes without a dialog again, crash.log will say exactly what happened instead of nothing at all. Tried to reproduce the specific crash that prompted this (repeated cold starts, ~8.5 minutes of runtime across two launches) and could not -- shipping the crash log regardless so the next occurrence, if there is one, is actually diagnosable."
 }

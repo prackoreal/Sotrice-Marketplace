@@ -1,15 +1,15 @@
 {
-  "version": "0.1.15",
-  "notes": "Fixes Sotrice repeatedly failing to open after an update or crash: a leftover background server from the previous session would keep holding the ports. Every launch now clears that away before starting its own, regardless of how the previous session ended.",
-  "pub_date": "2026-09-11T13:50:00Z",
+  "version": "0.1.16",
+  "notes": "Adds an always-on crash log next to the app itself. If Sotrice ever vanishes without a dialog again, crash.log will have exactly what happened instead of nothing at all -- release builds had zero panic visibility until now.",
+  "pub_date": "2026-09-11T15:55:00Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.15/Sotrice_0.1.15_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0REVmRzWUhoYW10Z0kwSWk0NXYwVWZqa3NsQU5zU096QktLSXV6Y3VkQ1pveTA4UGtVcncvaHlZUnArZGVHQVh5Q3IrSXk3OTJpeEplQnA5U1NBWGcwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MTI5MDEwCWZpbGU6U290cmljZV8wLjEuMTVfeDY0LXNldHVwLmV4ZQowVnlzVTlBekhZUU91c1FQNGN0U25WVEpsbThtQnFaN0RYdjBZSEFXL01WR3BRODZBQmljNVI4NGJOZmRzWnlyQzZRWUdDcGw1TXRqYkpGWlJUUW9CQT09Cg=="
+      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.16/Sotrice_0.1.16_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY09zcUxObHVXZ3QzY243U0diNWQ4RGNXNFViZ0hRSkJmdWNHTVB6elJwMGRIamlxVEx4SWcrK2xiOXlFckFNVUFoa1BidWVYS09wSXJGTXRHckxLMkFNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MTM1Njk2CWZpbGU6U290cmljZV8wLjEuMTZfeDY0LXNldHVwLmV4ZQpwWXR4OFZOVkFKdy92b3JSZkszTG5XZk43MjhERnZ6bXRsZE1RaFRkVjVXQXNWYzJ4QkZvSmd6UFBhdTZ0VXcxRGJxcmdqNG05RHBreHd4V3FIektDdz09Cg=="
     },
     "windows-x86_64-nsis": {
-      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.15/Sotrice_0.1.15_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0REVmRzWUhoYW10Z0kwSWk0NXYwVWZqa3NsQU5zU096QktLSXV6Y3VkQ1pveTA4UGtVcncvaHlZUnArZGVHQVh5Q3IrSXk3OTJpeEplQnA5U1NBWGcwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MTI5MDEwCWZpbGU6U290cmljZV8wLjEuMTVfeDY0LXNldHVwLmV4ZQowVnlzVTlBekhZUU91c1FQNGN0U25WVEpsbThtQnFaN0RYdjBZSEFXL01WR3BRODZBQmljNVI4NGJOZmRzWnlyQzZRWUdDcGw1TXRqYkpGWlJUUW9CQT09Cg=="
+      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.16/Sotrice_0.1.16_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY09zcUxObHVXZ3QzY243U0diNWQ4RGNXNFViZ0hRSkJmdWNHTVB6elJwMGRIamlxVEx4SWcrK2xiOXlFckFNVUFoa1BidWVYS09wSXJGTXRHckxLMkFNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MTM1Njk2CWZpbGU6U290cmljZV8wLjEuMTZfeDY0LXNldHVwLmV4ZQpwWXR4OFZOVkFKdy92b3JSZkszTG5XZk43MjhERnZ6bXRsZE1RaFRkVjVXQXNWYzJ4QkZvSmd6UFBhdTZ0VXcxRGJxcmdqNG05RHBreHd4V3FIektDdz09Cg=="
     },
     "darwin-x86_64": { "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases", "signature": "" },
     "darwin-aarch64": { "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases", "signature": "" },
