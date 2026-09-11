@@ -1,4 +1,4 @@
 {
-  "version": "0.1.16",
-  "notes": "Adds an always-on crash log written next to the app itself. Release builds had zero panic visibility until now -- if Sotrice ever vanishes without a dialog again, crash.log will say exactly what happened instead of nothing at all. Tried to reproduce the specific crash that prompted this (repeated cold starts, ~8.5 minutes of runtime across two launches) and could not -- shipping the crash log regardless so the next occurrence, if there is one, is actually diagnosable."
+  "version": "0.1.17",
+  "notes": "Fixes Sotrice appearing to open but showing nothing on screen. The window was actually rendering at 5x5 pixels instead of maximized, confirmed directly via Windows APIs on a real affected machine -- not a crash, a startup regression from the 0.1.14 fix meant to avoid a blank flash on launch. Reverted outright rather than patched: an invisible-but-running app is a far worse failure than a brief flash."
 }
