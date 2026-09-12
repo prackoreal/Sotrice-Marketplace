@@ -1,12 +1,14 @@
 """Math Teacher — the teacher side of the math/education spin's live
 class session: broadcasts question(s), tallies live answers, grades
 them, supports adaptive per-student difficulty, a streak/scoreboard
-layer, teacher live-editing, and now a per-class identity so more than
-one class can run on the same machine at once without their questions/
-answers/rosters bleeding into each other. Still the exact same
-Attribute-relay pattern every other plugin uses; still deliberately
-short of the harder pieces (handwriting, whiteboard, accounts,
-cross-device networking) that get built later.
+layer, teacher live-editing, a per-class identity so more than one
+class can run on the same machine at once without their questions/
+answers/rosters bleeding into each other, and now persistence — a
+class's identity, roster, and question bank survive the process
+exiting. Still the exact same Attribute-relay pattern every other
+plugin uses; still deliberately short of the harder pieces
+(handwriting, whiteboard, accounts, cross-device networking) that get
+built later.
 
 Class identity: on start, generates a short CLASS_CODE (see
 generate_class_code) and publishes it bare/unnamespaced as `class_code`
@@ -19,6 +21,68 @@ each other's questions, answers, or roster. A math_student instance
 (or the real student-facing UI) has to know the same code to talk to
 this specific class at all.
 
+Persistence: a class's identity, roster, and question bank now survive
+the process exiting, under %APPDATA%\\Sotrice\\classes\\<class_code>\\ (or
+SOTRICE_CLASSES_DIR, if set — the same env-override idiom
+sotrice-server's own SOTRICE_PLUGIN_PORT/SOTRICE_WS_PORT already use,
+purely so a test run doesn't write into a real machine's actual class
+data; defaults are unchanged for everyone who never sets it). A freshly
+generated class_code stays PURELY IN MEMORY, same as before, until
+ensure_persisted() sees the first real sign of use — a student actually
+joining, or a teacher actually sending a teacher_command / adaptive_mode
+/ student_tier / scoreboard_enabled write — at which point (and only
+then) it's written to disk for the first time, and that code becomes
+this class's permanent identity, never reminted on a later relaunch.
+This is deliberate: an unopened or never-touched launch (someone starts
+math-teacher and immediately closes it) must NOT permanently mint a
+class nobody asked for, or the set of "known classes" would grow
+without bound from launches that were never real classes at all.
+
+Four files per persisted class:
+  meta.json — {"class_name", "created_at"}.
+  roster.json — [{"student_id", "name", "joined_at"}, ...], appended to
+    (never rewritten wholesale) the first time each student entity is
+    ever admitted via ensure_student — the same place this file already
+    tracks "who's a known student" for the live tally, not a new
+    detection mechanism. "name" is best-effort, filled from a bare
+    (unnamespaced) "student_name" this file already watches for exactly
+    this purpose (see on_student_name) — a real student's own name is
+    published well before its first answer, so this is normally
+    accurate, but falls back to a placeholder if it somehow isn't known
+    yet rather than blocking the join from being recorded at all.
+  questions.json — this class's OWN copy of the question bank, seeded
+    once from QUESTION_BANK_BY_TIER at first persistence (see
+    persist_new_class) and read from disk from then on (see
+    class_question_bank below) — fixes the original first-slice's
+    "every process shares one hardcoded, from-scratch-every-round bank"
+    as a side effect of adding real per-class storage.
+  materials.json — {"chapters": []}. Genuinely empty on purpose — no
+    real course-material backend exists yet (see project memory /
+    CourseMaterialPanel in MathClassView.tsx); this just reserves the
+    shape so real content has somewhere to persist once that's built,
+    rather than inventing fake seeded content now.
+A top-level index.json (a list of {"code", "name"}) tracks every class
+ever persisted, appended to by persist_new_class and published bare as
+known_classes (see publish_known_classes) so a frontend picker can list
+every class that exists, running or not, without a new IPC mechanism —
+just the same attribute-publish idiom class_code/class_name already use.
+
+Resuming: a `load_class` command (bare/unnamespaced, entity-targeted at
+this instance's own control entity — see on_load_class) reads a
+previously-persisted class back off disk and makes THIS instance take
+over its identity: class_code/class_name are overwritten (republished),
+its questions.json becomes this run's class_question_bank, and every
+class_attr()-scoped subscription is re-registered under the RESUMED
+code (subscribe_class_scoped()) — sotrice_client's World has no
+unsubscribe, so the discarded temporary code's subscriptions are simply
+left registered and dead (nothing will ever publish under a code that
+was never shown to anyone), which costs nothing real. The live
+in-memory roster/scores/tiers for the new session start EMPTY (a resume
+is a fresh session with the old identity and question bank, not a
+replay of exactly who was online last time) — roster.json's history is
+untouched and simply gains new entries as students reconnect and answer
+again.
+
 Backward compatible IN SPIRIT only, not by exact attribute name: with
 adaptive_mode == "off" and no teacher_command ever sent, the shape of
 everything published is unchanged from the original single-question
@@ -28,7 +92,9 @@ these under their class_attr(name) form, not the bare name.
 
 Entities published:
   A single control entity, kind="math_class", class_code (str, bare/
-  unnamespaced), class_name (str, bare/unnamespaced):
+  unnamespaced), class_name (str, bare/unnamespaced), known_classes
+  (list[{"code", "name"}], bare/unnamespaced — see the Persistence
+  section above):
     All namespaced via class_attr() below:
     question_text, question_options (list[str]), question_index (int,
       bumps every new round), question_source ("builtin" |
@@ -63,9 +129,8 @@ Entities published:
       date while enabled; actively cleared to [] the instant it's
       turned off, never populated while off.
 
-Reads (subscribing to a class_attr()-scoped name, not a specific
-entity — any number of math_student instances for THIS class can
-exist):
+Reads (subscribing to a class_attr()-scoped name, not a specific entity —
+any number of math_student instances for THIS class can exist):
     answer — {"question_index": int, "option": int, "tier": str
     (optional)}. Missing/unknown/inactive "tier" is treated as
     DEFAULT_TIER, which is exactly right for a student that predates
@@ -95,11 +160,25 @@ exist):
         EXTEND_SECONDS_MIN..MAX.
     Anything that doesn't match one of these shapes, or names a tier
     that isn't currently active, is silently dropped.
+
+Also reads, bare/unnamespaced (not class_attr()-scoped — same tier as
+class_code/class_name/kind themselves):
+    student_name — any math_student's own display name (see
+      math_student.py), cached best-effort against a future roster
+      entry (see the Persistence section above); never required — a
+      student who hasn't published one yet just gets a placeholder.
+    load_class — see the Persistence section above (on_load_class).
+      Entity-targeted at THIS instance's own control entity; a
+      load_class write aimed at a different control entity (some other
+      running instance) is ignored here, same as teacher_command.
 """
 
+import json
 import math
+import os
 import random
 import time
+from pathlib import Path
 
 from sotrice_client import World
 
@@ -181,8 +260,109 @@ EXTEND_SECONDS_MAX = 300.0
 # class is dozens of students, not hundreds, so this costs nothing for
 # legitimate use. Every dict below keyed by student entity id is only
 # ever populated through ensure_student, which is the single place
-# this cap is enforced.
+# this cap is enforced. student_name_by_id (bare/global, not per-class)
+# reuses the same cap for the same reason.
 MAX_TRACKED_STUDENTS = 200
+
+
+# --- Persistence: plain stdlib json/pathlib, no new dependencies, ---
+# --- matching this repo's existing file-I/O style (see spy_loader.py). ---
+
+# Env-overridable the same way sotrice-server's own SOTRICE_PLUGIN_PORT/
+# SOTRICE_WS_PORT already are (see server/src/main.rs): "a second,
+# throwaway instance (testing a change live) can run alongside" a real
+# machine's real class data "without fighting it" — defaults are
+# unchanged for everyone who never sets this.
+CLASSES_DIR = (
+    Path(os.environ["SOTRICE_CLASSES_DIR"])
+    if os.environ.get("SOTRICE_CLASSES_DIR")
+    else Path(os.environ["APPDATA"]) / "Sotrice" / "classes"
+)
+INDEX_PATH = CLASSES_DIR / "index.json"
+
+
+def _read_json(path: Path, default):
+    """Best-effort JSON read, same plain open()/json.load() style this
+    repo already uses (see spy_loader.py's load_scene) — missing or
+    corrupt is treated the same as "nothing here yet", never a crash."""
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return default
+
+
+def _write_json(path: Path, data) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+
+def load_index() -> list[dict]:
+    return _read_json(INDEX_PATH, [])
+
+
+def append_to_index(code: str, class_display_name: str) -> None:
+    """Read-modify-write, no file locking — fine at the realistic scale
+    here (a handful of concurrent local teacher processes on one
+    machine), not a general-purpose concurrent-writers solution."""
+    index = load_index()
+    if not any(entry.get("code") == code for entry in index):
+        index.append({"code": code, "name": class_display_name})
+        _write_json(INDEX_PATH, index)
+
+
+def class_dir_for(code: str) -> Path:
+    return CLASSES_DIR / code
+
+
+def persist_new_class(code: str, class_display_name: str, question_bank: dict) -> None:
+    """First-ever persistence of a freshly-generated class code — see
+    ensure_persisted()'s call sites for exactly when this fires (the
+    first real sign of use, not merely "the process started"), which is
+    what keeps an unused/never-touched launch from permanently minting
+    a class nobody asked for."""
+    class_dir = class_dir_for(code)
+    _write_json(class_dir / "meta.json", {"class_name": class_display_name, "created_at": time.time()})
+    _write_json(class_dir / "questions.json", question_bank)
+    _write_json(class_dir / "roster.json", [])
+    _write_json(class_dir / "materials.json", {"chapters": []})
+    append_to_index(code, class_display_name)
+
+
+def append_roster_entry(code: str, student_id: int, student_display_name: str) -> None:
+    roster_path = class_dir_for(code) / "roster.json"
+    roster = _read_json(roster_path, [])
+    if not isinstance(roster, list):
+        roster = []
+    roster.append({"student_id": student_id, "name": student_display_name, "joined_at": time.time()})
+    _write_json(roster_path, roster)
+
+
+def load_class_bundle(code: str) -> dict | None:
+    """Reads a previously-persisted class back off disk for on_load_class
+    to resume from. None if `code` was never persisted (unknown/typo'd
+    code, or a code that was generated but never actually used) —
+    on_load_class treats that as "ignore", the same silent-drop posture
+    every other malformed/unrecognized input in this file already has."""
+    class_dir = class_dir_for(code)
+    meta = _read_json(class_dir / "meta.json", None)
+    if not isinstance(meta, dict):
+        return None
+    questions = _read_json(class_dir / "questions.json", {})
+    # Light validation, since this is a file a human could hand-edit —
+    # fall back tier-by-tier to the hardcoded default rather than ever
+    # leaving a tier with nothing to draw a question from.
+    healed = dict(QUESTION_BANK_BY_TIER)
+    if isinstance(questions, dict):
+        for tier in TIERS:
+            bank = questions.get(tier)
+            if isinstance(bank, list) and len(bank) > 0:
+                healed[tier] = bank
+    class_display_name = meta.get("class_name")
+    if not isinstance(class_display_name, str) or not class_display_name:
+        class_display_name = f"Class {code}"
+    return {"class_name": class_display_name, "questions": healed}
 
 
 with World() as world:
@@ -216,6 +396,15 @@ with World() as world:
     round_index = -1
     question_deadline = SECONDS_PER_QUESTION
 
+    # This class's own question bank — the hardcoded literal until (and
+    # unless) ensure_persisted() seeds a real questions.json, or
+    # on_load_class replaces it wholesale with a resumed class's own
+    # file. See the module docstring's "Persistence" section.
+    class_question_bank: dict[str, list] = QUESTION_BANK_BY_TIER
+    # Whether THIS class's code/name/question-bank have ever been
+    # written to disk yet — see ensure_persisted().
+    class_persisted = False
+
     # Populated by next_question(); safe non-empty defaults here so an
     # "answer" replay racing ahead of the first next_question() call
     # (pushes dispatch on their own thread) never indexes into an
@@ -224,9 +413,9 @@ with World() as world:
     current_active_tiers: list[str] = [DEFAULT_TIER]
     current_bank_by_tier: dict[str, dict] = {
         DEFAULT_TIER: {
-            "text": QUESTION_BANK_BY_TIER[DEFAULT_TIER][0][0],
-            "options": QUESTION_BANK_BY_TIER[DEFAULT_TIER][0][1],
-            "correct_index": QUESTION_BANK_BY_TIER[DEFAULT_TIER][0][2],
+            "text": class_question_bank[DEFAULT_TIER][0][0],
+            "options": class_question_bank[DEFAULT_TIER][0][1],
+            "correct_index": class_question_bank[DEFAULT_TIER][0][2],
             "source": "builtin",
         }
     }
@@ -242,6 +431,13 @@ with World() as world:
     #            "last_graded_round": int}
     student_stats: dict[int, dict] = {}
     recent_correct_by_id: dict[int, list] = {}
+    # entity -> best-known display name, from any math_student's bare
+    # "student_name" (see on_student_name) — global across every class
+    # on this server (student_name isn't class_attr()-scoped), which is
+    # harmless: only ever consulted for an entity this class's OWN
+    # known_students already contains. Capped the same way and for the
+    # same reason as known_students itself.
+    student_name_by_id: dict[int, str] = {}
 
     def ensure_student(entity: int) -> bool:
         """Registers `entity` as a known/tracked student if it isn't
@@ -253,7 +449,26 @@ with World() as world:
             return False
         known_students.add(entity)
         student_tier_by_id.setdefault(entity, DEFAULT_TIER)
+        # A student actually joining is the observable "this class is
+        # for real" moment this file already has (this IS the existing
+        # live-tally join-detection point, not a new mechanism) — see
+        # the module docstring's "Persistence" section.
+        ensure_persisted()
+        append_roster_entry(
+            class_code, entity, student_name_by_id.get(entity, f"Student {entity}")
+        )
         return True
+
+    def ensure_persisted():
+        """No-ops after the first call for this class — see the module
+        docstring's "Persistence" section for exactly what "first" means
+        and why it's not simply "at startup"."""
+        global class_persisted
+        if class_persisted:
+            return
+        class_persisted = True
+        persist_new_class(class_code, class_name, class_question_bank)
+        publish_known_classes()
 
     def shift_tier(entity: int, direction: int):
         current = student_tier_by_id.get(entity, DEFAULT_TIER)
@@ -375,6 +590,15 @@ with World() as world:
             (control, class_attr("adaptive_mode"), adaptive_mode),
         ])
 
+    def publish_known_classes():
+        """Publishes the shared index.json (every class ever persisted,
+        by ANY math-teacher process on this machine) bare/unnamespaced
+        on this instance's own control entity — see the module
+        docstring's "Persistence" section. A frontend picker subscribes
+        to this the same way it already discovers class_code/
+        class_name, no new IPC mechanism needed."""
+        world.set_attribute(control, "known_classes", load_index())
+
     def next_question():
         global round_index, current_active_tiers, current_bank_by_tier, question_deadline
         round_index += 1
@@ -383,7 +607,7 @@ with World() as world:
         current_active_tiers = list(TIERS) if adaptive_mode != "off" else [DEFAULT_TIER]
         current_bank_by_tier = {}
         for tier in current_active_tiers:
-            bank = QUESTION_BANK_BY_TIER[tier]
+            bank = class_question_bank[tier]
             text, options, correct_index = bank[round_index % len(bank)]
             current_bank_by_tier[tier] = {
                 "text": text,
@@ -451,6 +675,18 @@ with World() as world:
         grade_answer(entity, tier, option)
         publish_student_state()
 
+    def on_student_name(entity, attribute, value, source):
+        # Bare/global (see module docstring) — every math_student on
+        # this machine publishes this, regardless of which class it
+        # belongs to. Only ever actually consulted (in ensure_student)
+        # for an entity this class's own known_students already
+        # contains, so aggregating indiscriminately here is harmless.
+        if not isinstance(value, str) or not value:
+            return
+        if entity not in student_name_by_id and len(student_name_by_id) >= MAX_TRACKED_STUDENTS:
+            return
+        student_name_by_id[entity] = value
+
     def on_adaptive_mode_external(entity, attribute, value, source):
         # Ignore our own pushes echoing back — only adopt a mode set
         # by someone else (a teacher UI toggling the control).
@@ -459,6 +695,7 @@ with World() as world:
             return
         if value not in ADAPTIVE_MODES or value == adaptive_mode:
             return
+        ensure_persisted()  # a teacher actively configuring this class is real use
         adaptive_mode = value
         next_question()  # re-broadcast under the new mode now, not up to SECONDS_PER_QUESTION from now
 
@@ -481,6 +718,7 @@ with World() as world:
                 student_tier_by_id[student_id] = tier
                 changed = True
         if changed:
+            ensure_persisted()
             publish_student_state()
 
     def on_scoreboard_enabled_external(entity, attribute, value, source):
@@ -492,6 +730,7 @@ with World() as world:
             return
         if not isinstance(value, bool) or value == scoreboard_enabled:
             return
+        ensure_persisted()
         scoreboard_enabled = value
         if scoreboard_enabled:
             publish_scoreboard()
@@ -510,6 +749,7 @@ with World() as world:
         global elapsed, question_deadline
         if entity != control or not isinstance(value, dict):
             return
+        ensure_persisted()  # a teacher actively driving this session is real use
         cmd = value.get("cmd")
 
         if cmd == "next":
@@ -562,6 +802,68 @@ with World() as world:
         # Anything else (missing/unknown "cmd", extra junk keys) falls
         # through and is ignored.
 
+    def subscribe_class_scoped():
+        """Every class_attr()-scoped subscription this plugin needs —
+        factored out so on_load_class can re-run it under a RESUMED
+        class's code, not just once at startup. sotrice_client's World
+        has no unsubscribe, so re-running this after class_code changes
+        ADDS subscriptions under the new namespaced names without ever
+        removing the old (now-permanently-dead, since nothing will ever
+        publish under a discarded temporary code again) ones — see the
+        module docstring's "Resuming" section."""
+        world.subscribe(class_attr("answer"), on_answer, replay=True)
+        world.subscribe(class_attr("adaptive_mode"), on_adaptive_mode_external, replay=False)
+        world.subscribe(class_attr("student_tier"), on_student_tier_external, replay=False)
+        world.subscribe(class_attr("scoreboard_enabled"), on_scoreboard_enabled_external, replay=False)
+        # replay=False — a command is a one-shot action ("advance now",
+        # "here's an edit"), not persistent state to replay to a
+        # late-joining subscriber the way "answer" and question_* are.
+        world.subscribe(class_attr("teacher_command"), on_teacher_command, replay=False)
+
+    def on_load_class(entity, attribute, value, source):
+        """See the module docstring's "Resuming" section. `value` is a
+        previously-persisted class's code; entity-targeted at THIS
+        instance's own control entity, same idiom as teacher_command."""
+        global class_code, class_name, class_question_bank, class_persisted
+        global adaptive_mode, scoreboard_enabled, elapsed
+        if entity != control or not isinstance(value, str):
+            return
+        code = value.strip().upper()
+        if len(code) != CLASS_CODE_LENGTH or any(ch not in CLASS_CODE_ALPHABET for ch in code):
+            return
+        bundle = load_class_bundle(code)
+        if bundle is None:
+            print(f"[{name}] load_class: no persisted class found for code {code!r}, ignoring", flush=True)
+            return
+
+        # A resumed session starts with an empty LIVE roster/scores —
+        # roster.json's history is untouched and simply gains new
+        # entries as students reconnect and answer again (see the
+        # module docstring).
+        known_students.clear()
+        student_tier_by_id.clear()
+        student_stats.clear()
+        recent_correct_by_id.clear()
+        answers_by_student.clear()
+
+        class_code = code
+        class_name = bundle["class_name"]
+        class_question_bank = bundle["questions"]
+        class_persisted = True  # already on disk — never re-seed/re-append-to-index for this code
+        adaptive_mode = "off"
+        scoreboard_enabled = False
+
+        world.set_many([
+            (control, "class_code", class_code),
+            (control, "class_name", class_name),
+        ])
+        world.set_attribute(control, class_attr("scoreboard"), [])
+        subscribe_class_scoped()
+        publish_known_classes()
+        print(f"[{name}] resumed class '{class_name}' (code {class_code}) from disk", flush=True)
+        next_question()
+        elapsed = 0.0
+
     # elapsed must exist before any subscription is live: a push can be
     # dispatched from the background dispatch thread the instant
     # subscribe() returns, and on_teacher_command's `global elapsed`
@@ -569,15 +871,14 @@ with World() as world:
     elapsed = 0.0
 
     world.set_attribute(control, class_attr("scoreboard"), [])
+    publish_known_classes()
 
-    world.subscribe(class_attr("answer"), on_answer, replay=True)
-    world.subscribe(class_attr("adaptive_mode"), on_adaptive_mode_external, replay=False)
-    world.subscribe(class_attr("student_tier"), on_student_tier_external, replay=False)
-    world.subscribe(class_attr("scoreboard_enabled"), on_scoreboard_enabled_external, replay=False)
-    # replay=False — a command is a one-shot action ("advance now",
-    # "here's an edit"), not persistent state to replay to a
-    # late-joining subscriber the way "answer" and question_* are.
-    world.subscribe(class_attr("teacher_command"), on_teacher_command, replay=False)
+    subscribe_class_scoped()
+    # Bare/unnamespaced — not part of any one class's namespace (see
+    # the module docstring on why load_class can't be class_attr()
+    # scoped, and why student_name is deliberately global too).
+    world.subscribe("student_name", on_student_name, replay=True)
+    world.subscribe("load_class", on_load_class, replay=False)
 
     next_question()
     try:
@@ -594,16 +895,19 @@ with World() as world:
 # SECURITY NOTE — read before this ever leaves localhost:
 #
 # Every input this file actually receives from the outside — "answer",
-# "adaptive_mode", "student_tier", "scoreboard_enabled", and
-# "teacher_command" (all class_attr()-scoped) — is validated and
-# bounded above: shape-checked, range-checked against the actual active
-# question for a given tier, capped at MAX_TRACKED_STUDENTS via
-# ensure_student (the single gate every per-student dict is populated
+# "adaptive_mode", "student_tier", "scoreboard_enabled", "teacher_command"
+# (all class_attr()-scoped), and now "student_name"/"load_class" (bare) —
+# is validated and bounded above: shape-checked, range-checked against the
+# actual active question for a given tier, capped at MAX_TRACKED_STUDENTS
+# via ensure_student (the single gate every per-student dict is populated
 # through), constrained to the fixed ADAPTIVE_MODES/TIERS enums rather
 # than accepting arbitrary strings, and length/type/range-checked for
 # teacher_command specifically before ever touching current_bank_by_tier
 # or elapsed. That covers what a malformed or hostile payload could do
-# to THIS plugin's own logic.
+# to THIS plugin's own logic. load_class is likewise shape- and
+# alphabet/length-checked before ever touching disk, and an unknown code
+# is silently ignored rather than treated as "create a new class with
+# this code" — a code only ever becomes real through ensure_persisted().
 #
 # The class_code namespacing (see the module docstring) keeps two
 # concurrent classes' DATA separate on the same local server, but it is
@@ -615,6 +919,11 @@ with World() as world:
 # concept of identity or permission at all yet — any process that can
 # reach its port can call identify("math-student") (or any other type),
 # or just start writing attributes directly with no identify() call.
+# The same is true of the on-disk persistence added here: anything that
+# can reach %APPDATA%\Sotrice\classes\ (or read a class_code off a
+# projector) can read or resume that class — no new exposure beyond
+# what class_code sharing already implied, but worth restating now that
+# there's real data sitting on disk, not just in one process's memory.
 #
 # It stops being acceptable the moment a real student's own device
 # connects over a real network instead of a locally co-located trusted
