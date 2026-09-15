@@ -1,7 +1,7 @@
 {
   "type": "math-teacher",
-  "version": "0.2.0",
-  "description": "Broadcasts a multiple-choice question and tallies live answers. Now with adaptive per-student difficulty (off by default; teacher-toggleable automatic/manual), a correctness streak and opt-in scoreboard per student, and live mid-session editing (replace the current question, skip ahead, or extend the timer) via a teacher_command control attribute. No real teacher UI yet -- all of this is driven by attributes for now. Install math-student alongside it to see the tally move.",
+  "version": "0.3.0",
+  "description": "Broadcasts a multiple-choice question and tallies live answers. Has adaptive per-student difficulty (off by default; teacher-toggleable automatic/manual), a correctness streak and opt-in scoreboard per student, live mid-session editing (replace the current question, skip ahead, or extend the timer) via a teacher_command control attribute, a per-class identity (class_code/class_name) so more than one class can run on the same machine without their data mixing, and persistence -- a class's identity, roster, and question bank survive the process exiting, and can be resumed later. Install math-student alongside it to see the tally move.",
   "concepts": [
     "MathClass"
   ],

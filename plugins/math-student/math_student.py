@@ -6,24 +6,17 @@ clicking an option until there's a real UI for it — swapping that
 random pick for an actual click later doesn't change the protocol at
 all, only where the option index comes from.
 
-Class identity: this student doesn't do anything until it knows which
-class's code to use for every class_attr()-scoped name (see
-math_teacher.py's own docstring on class_attr) — otherwise it would
-have no way to tell two concurrently-running classes' questions apart.
-Two ways to learn it, in order:
-  1. sys.argv[1], if given — the convenient path for manually running
-     this file directly during testing (`python math_student.py
-     ABC123`), which never goes through the Toolbox/StartPlugin at all.
-  2. Otherwise, waits for an external `join_code` write on its OWN
-     entity — the same post-connect-control-attribute idiom every
-     other cross-plugin config in this codebase uses, for whenever
-     this IS started via the Toolbox (which has no way to pass a
-     launch-time argument) and something else (a join-flow UI) sets
-     the code right after.
-This file is a simulated bot standing in for testing/demo load, not
-the real human-facing student experience — that's the actual Simulation
-View UI, which collects a class code from a person directly and never
-needs this launch-time-vs-post-connect distinction at all.
+Class identity: every attribute math_teacher.py reads or writes is
+class_attr()-scoped (`f"{name}:{class_code}"`) except class_code itself
+(see math_teacher.py's own docstring) — so this file waits for a
+teacher's bare class_code push before it can subscribe to or write
+anything else. Picks whichever class_code it sees first, same
+"there's exactly one math-teacher control entity in practice, but this
+never assumes that" stance the rest of this file already took before
+class identity existed — good enough for local single-class testing,
+which is this simulated bot's only real job; a real student picks a
+specific class through the actual join-code UI instead (see
+MathStudentView.tsx), which already speaks this same scoped protocol.
 
 Entities published:
   Its own entity, kind="math_student":
@@ -35,11 +28,10 @@ Entities published:
       at (see on_student_tier below) — always sent, so an old teacher
       that ignores unknown fields is unaffected, and a tiering-aware
       teacher can grade against the right question. Published under
-      class_attr("answer") once a class code is known.
+      class_attr("answer") once class_code is known (see above).
 
-Reads (subscribing to class_attr()-scoped names, not a specific entity —
-there's exactly one control entity per class in practice, but this
-never assumes that; the FIRST value seen for each name is what's used,
+Reads (subscribing to class_attr()-scoped names once class_code is
+known — see above; the FIRST value seen for each name is what's used,
 matching how every other plugin here treats a "there should only be
 one" attribute):
     question_by_tier — {tier: {"text", "options"}}. Preferred source of
@@ -74,7 +66,6 @@ one" attribute):
 
 import random
 import string
-import sys
 import time
 
 from sotrice_client import World
@@ -90,6 +81,7 @@ def random_name() -> str:
 
 with World() as world:
     name = world.identify("math-student")
+    print(f"[{name}] joined the class", flush=True)
 
     me = world.create_entity()
     world.set_many([
@@ -97,11 +89,25 @@ with World() as world:
         (me, "student_name", random_name()),
     ])
 
-    class_code: str | None = sys.argv[1] if len(sys.argv) > 1 else None
+    # Waits for a teacher's bare class_code push (see the module
+    # docstring) — first one seen wins, same "there's exactly one in
+    # practice" assumption already used everywhere else in this file.
+    class_code: str | None = None
+
+    def on_class_code(entity, attribute, value, source):
+        global class_code
+        if class_code is None and isinstance(value, str):
+            class_code = value
+
+    world.subscribe("class_code", on_class_code, replay=True)
+    while class_code is None:
+        time.sleep(0.1)
 
     def class_attr(attr_name: str) -> str:
-        assert class_code is not None
+        """Mirrors math_teacher.py's own class_attr() exactly."""
         return f"{attr_name}:{class_code}"
+
+    print(f"[{name}] found class (code {class_code})", flush=True)
 
     # Fallback (pre-tiering) question content.
     fallback_options: list = []
@@ -180,30 +186,14 @@ with World() as world:
         if scoreboard_enabled:
             print(f"[{name}] scoreboard: {current_scoreboard}", flush=True)
 
-    def subscribe_to_class():
-        world.subscribe(class_attr("question_options"), on_question_options, replay=True)
-        world.subscribe(class_attr("question_index"), on_question_index, replay=True)
-        world.subscribe(class_attr("question_by_tier"), on_question_by_tier, replay=True)
-        world.subscribe(class_attr("student_tier"), on_student_tier, replay=True)
-        world.subscribe(class_attr("student_streak"), on_student_streak, replay=True)
-        world.subscribe(class_attr("student_score"), on_student_score, replay=True)
-        world.subscribe(class_attr("scoreboard_enabled"), on_scoreboard_enabled, replay=True)
-        world.subscribe(class_attr("scoreboard"), on_scoreboard, replay=True)
-
-    if class_code is not None:
-        print(f"[{name}] joining class {class_code} (given on the command line)", flush=True)
-        subscribe_to_class()
-    else:
-        def on_join_code(entity, attribute, value, source):
-            global class_code
-            if entity != me or class_code is not None or not isinstance(value, str) or not value:
-                return
-            class_code = value
-            print(f"[{name}] joining class {class_code}", flush=True)
-            subscribe_to_class()
-
-        print(f"[{name}] waiting for a join_code...", flush=True)
-        world.subscribe("join_code", on_join_code, replay=True)
+    world.subscribe(class_attr("question_options"), on_question_options, replay=True)
+    world.subscribe(class_attr("question_index"), on_question_index, replay=True)
+    world.subscribe(class_attr("question_by_tier"), on_question_by_tier, replay=True)
+    world.subscribe(class_attr("student_tier"), on_student_tier, replay=True)
+    world.subscribe(class_attr("student_streak"), on_student_streak, replay=True)
+    world.subscribe(class_attr("student_score"), on_student_score, replay=True)
+    world.subscribe(class_attr("scoreboard_enabled"), on_scoreboard_enabled, replay=True)
+    world.subscribe(class_attr("scoreboard"), on_scoreboard, replay=True)
 
     def current_question_options() -> list:
         if my_tier and my_tier in question_by_tier:
@@ -215,8 +205,6 @@ with World() as world:
     try:
         while True:
             time.sleep(0.5)
-            if class_code is None:
-                continue
             options = current_question_options()
             if current_index is not None and current_index != answered_index and options:
                 # Snapshot before the think-delay: question_index/

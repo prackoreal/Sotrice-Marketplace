@@ -45,8 +45,8 @@
     },
     {
       "type": "math-teacher",
-      "version": "0.2.0",
-      "description": "Broadcasts a multiple-choice question and tallies live answers. Now with adaptive per-student difficulty (off by default; teacher-toggleable automatic/manual), a correctness streak and opt-in scoreboard per student, and live mid-session editing (replace the current question, skip ahead, or extend the timer) via a teacher_command control attribute. No real teacher UI yet -- all of this is driven by attributes for now. Install math-student alongside it to see the tally move.",
+      "version": "0.3.0",
+      "description": "Broadcasts a multiple-choice question and tallies live answers. Has adaptive per-student difficulty (off by default; teacher-toggleable automatic/manual), a correctness streak and opt-in scoreboard per student, live mid-session editing (replace the current question, skip ahead, or extend the timer) via a teacher_command control attribute, a per-class identity (class_code/class_name) so more than one class can run on the same machine without their data mixing, and persistence -- a class's identity, roster, and question bank survive the process exiting, and can be resumed later. Install math-student alongside it to see the tally move.",
       "concepts": [
         "MathClass"
       ],
@@ -56,8 +56,8 @@
     },
     {
       "type": "math-student",
-      "version": "0.2.0",
-      "description": "One simulated student in a math-teacher class: watches its assigned question (tiered if the teacher's adaptive difficulty is on) and answers after a short random 'thinking' delay, standing in for a real student clicking an option until there's a real UI for it. Also reads its own streak and the class scoreboard when the teacher enables it. Install several instances to populate math-teacher's live tally.",
+      "version": "0.3.0",
+      "description": "One simulated student in a math-teacher class: watches its assigned question (tiered if the teacher's adaptive difficulty is on) and answers after a short random 'thinking' delay, standing in for a real student clicking an option until there's a real UI for it. Also reads its own streak and the class scoreboard when the teacher enables it, and can join a specific class by code. Install several instances to populate math-teacher's live tally.",
       "concepts": [
         "Students"
       ],
@@ -93,8 +93,8 @@
     },
     {
       "name": "Math Plugin",
-      "version": "0.2.0",
-      "description": "A teacher broadcasts multiple-choice questions (with adaptive per-student difficulty, streaks, an opt-in scoreboard, and live mid-session editing), students answer, a live tally shows on screen. Installs both math-teacher and math-student; they land on the canvas already grouped as one block.",
+      "version": "0.3.0",
+      "description": "A teacher broadcasts multiple-choice questions (with adaptive per-student difficulty, streaks, an opt-in scoreboard, live mid-session editing, per-class identity, and persistence across restarts), students answer, a live tally shows on screen. Installs both math-teacher and math-student; they land on the canvas already grouped as one block.",
       "includes": [
         "math-teacher",
         "math-student"
