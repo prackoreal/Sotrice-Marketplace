@@ -1,4 +1,4 @@
 {
-  "version": "0.1.19",
-  "notes": "Fixes a broken 0.1.18 release: the installer was missing WebView2Loader.dll, a Windows system component the app needs just to start -- it failed to launch at all right after installing. Rebuilt with the correct build target (--target x86_64-pc-windows-gnu) and verified the DLL is genuinely present inside the installer this time before publishing, instead of just trusting a green build."
+  "version": "0.1.20",
+  "notes": "Math classroom Stage 2 (student profiles, a second non-kiosk join entry path, teacher leave-lock, performance auto-grouping), fixes for multi-class bots piling into one class and ungrouping silently disabling a plugin, presentation-mode/F11/roster-overflow fixes, and a real fix to the in-app updater itself (the sidecar process wasn't confirmed dead before being overwritten, verified end to end this time by actually clicking Update, not just doing a fresh install)."
 }

@@ -1,15 +1,15 @@
 {
-  "version": "0.1.19",
-  "notes": "Fixes a broken 0.1.18 release: the installer was missing WebView2Loader.dll (a Windows system component the app needs to start), so it failed to launch at all right after installing. Rebuilt with the correct build target and verified the DLL is actually present this time before publishing.",
-  "pub_date": "2026-09-17T16:52:00Z",
+  "version": "0.1.20",
+  "notes": "Math classroom Stage 2 (student profiles with a Recent-classes quick-fill, a second non-kiosk join entry path, teacher-controlled leave-lock, and performance auto-grouping), plus real bug fixes: multiple local math-student bots no longer all pile into the same class, ungrouping a plugin in the Plugin Canvas no longer silently disables it, presentation mode and F11 fullscreen no longer overlap the dashboard, and a genuine student-roster overflow bug is fixed. Also fixes the in-app updater itself: the sidecar process wasn't confirmed dead before the installer tried to overwrite it, which could leave a mismatched app/server version pair on a bad race -- verified end to end this time with a real click of the actual Update button, not just a fresh install.",
+  "pub_date": "2026-09-17T19:11:02Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.19/Sotrice_0.1.19_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY01oSWxRcmN1OVNvMk5SWG1MYlg5OEt4SVZnVFFGckxDRkhORGc4NStTVnJaVW4vMlFhcm1vbFFaa1pISjFHL1o5U1RSVzJiSFMrNlU5bVN3QVNIcEFFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NjU1OTIxCWZpbGU6U290cmljZV8wLjEuMTlfeDY0LXNldHVwLmV4ZQplYU0vQVl5VTgxQVRmYTRVQTRFM0dDcUV5MjM1L21yckk5cUxQWTdvL3E0T0tVZ0RwS2RXcFI1Nmh1WUJJbFFibituNGNxSEJRTng3L0FjZFBYemJBdz09Cg=="
+      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.20/Sotrice_0.1.20_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0graSt4R2VIYVlNR0tPczR4UEZIS1JaZnRHTEZRQ3UvOUJBVmwvd1dzYjl3Rk1FTmdrdzgvcmhyOG5wOE9ldmJUcHZXUWZCYlNiV0I0SElLZTdkOXdzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NjcxODYyCWZpbGU6U290cmljZV8wLjEuMjBfeDY0LXNldHVwLmV4ZQpHTktxWTBGTXZSYnIxR2FKb3puV3lZcjZqZmNpUTZKUDdqM2thdDhaMC81c3VGWExjK005YUp5VEFXc3BrWUFoanQ0MXZ6aGQ0dFhzRnFNZC9nSWxDdz09Cg=="
     },
     "windows-x86_64-nsis": {
-      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.19/Sotrice_0.1.19_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY01oSWxRcmN1OVNvMk5SWG1MYlg5OEt4SVZnVFFGckxDRkhORGc4NStTVnJaVW4vMlFhcm1vbFFaa1pISjFHL1o5U1RSVzJiSFMrNlU5bVN3QVNIcEFFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NjU1OTIxCWZpbGU6U290cmljZV8wLjEuMTlfeDY0LXNldHVwLmV4ZQplYU0vQVl5VTgxQVRmYTRVQTRFM0dDcUV5MjM1L21yckk5cUxQWTdvL3E0T0tVZ0RwS2RXcFI1Nmh1WUJJbFFibituNGNxSEJRTng3L0FjZFBYemJBdz09Cg=="
+      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.20/Sotrice_0.1.20_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0graSt4R2VIYVlNR0tPczR4UEZIS1JaZnRHTEZRQ3UvOUJBVmwvd1dzYjl3Rk1FTmdrdzgvcmhyOG5wOE9ldmJUcHZXUWZCYlNiV0I0SElLZTdkOXdzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NjcxODYyCWZpbGU6U290cmljZV8wLjEuMjBfeDY0LXNldHVwLmV4ZQpHTktxWTBGTXZSYnIxR2FKb3puV3lZcjZqZmNpUTZKUDdqM2thdDhaMC81c3VGWExjK005YUp5VEFXc3BrWUFoanQ0MXZ6aGQ0dFhzRnFNZC9nSWxDdz09Cg=="
     },
     "darwin-x86_64": { "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases", "signature": "" },
     "darwin-aarch64": { "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases", "signature": "" },
