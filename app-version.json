@@ -1,4 +1,4 @@
 {
-  "version": "0.1.17",
-  "notes": "Fixes Sotrice appearing to open but showing nothing on screen. The window was actually rendering at 5x5 pixels instead of maximized, confirmed directly via Windows APIs on a real affected machine -- not a crash, a startup regression from the 0.1.14 fix meant to avoid a blank flash on launch. Reverted outright rather than patched: an invisible-but-running app is a far worse failure than a brief flash."
+  "version": "0.1.18",
+  "notes": "Real cross-device networking for the math classroom (LAN binding, a class-code access gate, LAN-IP display, real host/port/code join flow), independent multi-instance support, kiosk-mode student lock + teacher presentation mode + per-class persistence, and a Stage 1 content rebuild: free-response questions, hints, and a real question-authoring UI in the teacher dashboard. Also fixes a permanent \"waiting for the class session to start\" hang caused by a startup race in the frontend's attribute-push handling."
 }
