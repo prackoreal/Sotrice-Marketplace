@@ -1,4 +1,4 @@
 {
-  "version": "0.1.20",
-  "notes": "Math classroom Stage 2 (student profiles, a second non-kiosk join entry path, teacher leave-lock, performance auto-grouping), fixes for multi-class bots piling into one class and ungrouping silently disabling a plugin, presentation-mode/F11/roster-overflow fixes, and a real fix to the in-app updater itself (the sidecar process wasn't confirmed dead before being overwritten, verified end to end this time by actually clicking Update, not just doing a fresh install)."
+  "version": "0.1.21",
+  "notes": "Class-picker delete (removes old test classes that piled up with no cleanup path), more grid-item min-h-0 scroll fixes (course material, right-hand Students/Groups/AI tabs, class picker), a real styled scrollbar instead of the default OS one, presentation-button placement fixes (a findable 'Present' button, and the always-visible exit button moved off the dashboard's own content), and a templated (non-AI, no cost) question generator per difficulty tier."
 }
