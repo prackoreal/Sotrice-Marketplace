@@ -1,15 +1,15 @@
 {
-  "version": "0.1.17",
-  "notes": "Fixes Sotrice opening but showing nothing: the window was actually rendering at 5x5 pixels instead of maximized, a regression from the 0.1.14 startup-flash fix. Reverted outright.",
-  "pub_date": "2026-09-11T18:00:00Z",
+  "version": "0.1.18",
+  "notes": "Real cross-device networking for the math classroom (LAN binding, a class-code access gate, LAN-IP display, real host/port/code join flow), independent multi-instance support, kiosk-mode student lock + teacher presentation mode + per-class persistence, and a Stage 1 content rebuild: free-response questions, hints, and a real question-authoring UI. Also fixes a permanent \"waiting for the class session to start\" hang.",
+  "pub_date": "2026-09-17T13:36:08Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.17/Sotrice_0.1.17_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0ZNUnd6Y2FHWUNBeEdwdjI0OWJHUHl4OFpybFFtTDdWRVF5QUxXTHVUczdaNDIzU2VobUNDdlpxZ3lFc0YyQlRtaHJnUUhTOFdYU2RoYjdoRTBrQ1FFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MTQyMzczCWZpbGU6U290cmljZV8wLjEuMTdfeDY0LXNldHVwLmV4ZQpFYTFQNVJYeTRYUFY1c2VreE1mSHVXSUFpZ0xpSTdVTmROTUVLcXVSY2lQQ0FSUjBxc2VnTStOTnF3QUJXRUVQVXNyVEFyZEMyd29hdGJHK3F4VUZBdz09Cg=="
+      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.18/Sotrice_0.1.18_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY013T1J4c3h4eGJjS2lSd2NCK01mYWxaSmw3U0xjTTJvcis2T2JKMWM3Q3UwVVNwN0FzQXJPbzdzaTAwdTREdDIrRUJIbjF6TE96ZnNqUnpyVjBTeGdrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NjAxMzI1CWZpbGU6U290cmljZV8wLjEuMThfeDY0LXNldHVwLmV4ZQoyNWM2cHlnN1pnSGF1eEhkWXRROWdsMGZTQVBKRmMwelZiOHBkS2M2aGljdjR6S3B1b1VBZkt4SG4vN3NPSy80elY2bER6RXhzVG1LU0E0a211YnZCZz09Cg=="
     },
     "windows-x86_64-nsis": {
-      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.17/Sotrice_0.1.17_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0ZNUnd6Y2FHWUNBeEdwdjI0OWJHUHl4OFpybFFtTDdWRVF5QUxXTHVUczdaNDIzU2VobUNDdlpxZ3lFc0YyQlRtaHJnUUhTOFdYU2RoYjdoRTBrQ1FFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MTQyMzczCWZpbGU6U290cmljZV8wLjEuMTdfeDY0LXNldHVwLmV4ZQpFYTFQNVJYeTRYUFY1c2VreE1mSHVXSUFpZ0xpSTdVTmROTUVLcXVSY2lQQ0FSUjBxc2VnTStOTnF3QUJXRUVQVXNyVEFyZEMyd29hdGJHK3F4VUZBdz09Cg=="
+      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.18/Sotrice_0.1.18_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY013T1J4c3h4eGJjS2lSd2NCK01mYWxaSmw3U0xjTTJvcis2T2JKMWM3Q3UwVVNwN0FzQXJPbzdzaTAwdTREdDIrRUJIbjF6TE96ZnNqUnpyVjBTeGdrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NjAxMzI1CWZpbGU6U290cmljZV8wLjEuMThfeDY0LXNldHVwLmV4ZQoyNWM2cHlnN1pnSGF1eEhkWXRROWdsMGZTQVBKRmMwelZiOHBkS2M2aGljdjR6S3B1b1VBZkt4SG4vN3NPSy80elY2bER6RXhzVG1LU0E0a211YnZCZz09Cg=="
     },
     "darwin-x86_64": { "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases", "signature": "" },
     "darwin-aarch64": { "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases", "signature": "" },
