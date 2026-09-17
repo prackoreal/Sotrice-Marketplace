@@ -1,4 +1,4 @@
 {
-  "version": "0.1.22",
-  "notes": "Collapsible Live Statistics section (gives the student roster real vertical room instead of just a taller inner scrollbar), and Sotrice now ships with zero preinstalled spins -- a fresh install's Toolbox starts genuinely empty, everything comes from the Marketplace."
+  "version": "0.1.23",
+  "notes": "A crashed teacher process is now detectable instead of the dashboard silently pretending everything's fine. Existing installs are now actually pruned of preinstalled spins. Real math notation (KaTeX) now renders in question text, options, and hints. macOS build also available (Apple Silicon + Intel universal, smoke-tested on real hardware)."
 }

@@ -1,15 +1,15 @@
 {
-  "version": "0.1.22",
-  "notes": "Collapsible Live Statistics section (gives the student roster real vertical room instead of just a taller inner scrollbar), and Sotrice now ships with zero preinstalled spins -- a fresh install's Toolbox starts genuinely empty, everything comes from the Marketplace.",
-  "pub_date": "2026-09-17T20:42:31Z",
+  "version": "0.1.23",
+  "notes": "A crashed teacher process is now detectable instead of the dashboard silently pretending everything's fine. Existing installs are now actually pruned of preinstalled spins. Real math notation (KaTeX) now renders in question text, options, and hints. (macOS build also published this release, but not yet wired into this Windows-only updater manifest -- it's still unsigned until signing secrets are set up.)",
+  "pub_date": "2026-09-17T22:16:48Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.22/Sotrice_0.1.22_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0tjSmwvMVVHVlgrYjErSFc1REtHbWx6VFp0VzZFb0R4M2czSlhSc2k5R0dYbk5ISUVCTGFLcVpjSWR4a0dwcUo4NXhKUG1sTFFaYU5vTEwwRjNSend3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5Njc3NTY5CWZpbGU6U290cmljZV8wLjEuMjJfeDY0LXNldHVwLmV4ZQpzUFR0dFV0SmtQQ21mRVVlTHFXMFZDU1ljdnJPcCtXeFlYcXZhdTBUcEN2aWplWkJYTzF4UHBFU2JDWUxDZGU2bEg1bjVhN3hNZkd2dW1kbnpkNDlBZz09Cg=="
+      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.23/Sotrice_0.1.23_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0JGelhYSkJpeXhVQisvYUREc1IyV2FJbnp0NXU0TEk5V3VwbTVTSUkrS1p5c3RtOThGUUJic01QZnZLUXBvWGJnbkltcXJVeTYxWlR2dHovK1FWdkFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NjgyNzEwCWZpbGU6U290cmljZV8wLjEuMjNfeDY0LXNldHVwLmV4ZQpFMURLaEYwczBxZDhFd0lGQ2lTZEFFWTNoVHlnSmxiNXJ5b3VyN2s4SnlpamI5SDBYU2JKUERiR29zNURTWURVVEZSaXFXdjZ1UmxieE1XVDFwM0JCUT09Cg=="
     },
     "windows-x86_64-nsis": {
-      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.22/Sotrice_0.1.22_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0tjSmwvMVVHVlgrYjErSFc1REtHbWx6VFp0VzZFb0R4M2czSlhSc2k5R0dYbk5ISUVCTGFLcVpjSWR4a0dwcUo4NXhKUG1sTFFaYU5vTEwwRjNSend3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5Njc3NTY5CWZpbGU6U290cmljZV8wLjEuMjJfeDY0LXNldHVwLmV4ZQpzUFR0dFV0SmtQQ21mRVVlTHFXMFZDU1ljdnJPcCtXeFlYcXZhdTBUcEN2aWplWkJYTzF4UHBFU2JDWUxDZGU2bEg1bjVhN3hNZkd2dW1kbnpkNDlBZz09Cg=="
+      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.23/Sotrice_0.1.23_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0JGelhYSkJpeXhVQisvYUREc1IyV2FJbnp0NXU0TEk5V3VwbTVTSUkrS1p5c3RtOThGUUJic01QZnZLUXBvWGJnbkltcXJVeTYxWlR2dHovK1FWdkFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NjgyNzEwCWZpbGU6U290cmljZV8wLjEuMjNfeDY0LXNldHVwLmV4ZQpFMURLaEYwczBxZDhFd0lGQ2lTZEFFWTNoVHlnSmxiNXJ5b3VyN2s4SnlpamI5SDBYU2JKUERiR29zNURTWURVVEZSaXFXdjZ1UmxieE1XVDFwM0JCUT09Cg=="
     },
     "darwin-x86_64": { "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases", "signature": "" },
     "darwin-aarch64": { "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases", "signature": "" },
