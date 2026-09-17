@@ -1,15 +1,15 @@
 {
-  "version": "0.1.21",
-  "notes": "Class-picker delete (removes old test classes that piled up with no cleanup path), more grid-item min-h-0 scroll fixes (course material, right-hand Students/Groups/AI tabs, class picker), a real styled scrollbar instead of the default OS one, presentation-button placement fixes (a findable 'Present' button, and the always-visible exit button moved off the dashboard's own content), and a templated (non-AI, no cost) question generator per difficulty tier.",
-  "pub_date": "2026-09-17T20:16:29Z",
+  "version": "0.1.22",
+  "notes": "Collapsible Live Statistics section (gives the student roster real vertical room instead of just a taller inner scrollbar), and Sotrice now ships with zero preinstalled spins -- a fresh install's Toolbox starts genuinely empty, everything comes from the Marketplace.",
+  "pub_date": "2026-09-17T20:42:31Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.21/Sotrice_0.1.21_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0VBNzByRm9mcVpndDljNkMrSklBL3JSZFBTVmdmcXhnK1d6VStzbWtuMjQwOWdydGpDbmQzMVF6a1FFa2tBUUhHWVpJWDJwWk1pcDUzNkw3cDFRZGcwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5Njc1ODI5CWZpbGU6U290cmljZV8wLjEuMjFfeDY0LXNldHVwLmV4ZQpoeWVTSUNCci9HdjF5eVMraS8zNmd6VFYySTRTYmVPUkpNTFZ4bkpFQVV4cVpQOHZPZFB4U2laQytJT0tYUTJmeU5uUDd1QTZOVFR3MTU1bEpuMGFBQT09Cg=="
+      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.22/Sotrice_0.1.22_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0tjSmwvMVVHVlgrYjErSFc1REtHbWx6VFp0VzZFb0R4M2czSlhSc2k5R0dYbk5ISUVCTGFLcVpjSWR4a0dwcUo4NXhKUG1sTFFaYU5vTEwwRjNSend3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5Njc3NTY5CWZpbGU6U290cmljZV8wLjEuMjJfeDY0LXNldHVwLmV4ZQpzUFR0dFV0SmtQQ21mRVVlTHFXMFZDU1ljdnJPcCtXeFlYcXZhdTBUcEN2aWplWkJYTzF4UHBFU2JDWUxDZGU2bEg1bjVhN3hNZkd2dW1kbnpkNDlBZz09Cg=="
     },
     "windows-x86_64-nsis": {
-      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.21/Sotrice_0.1.21_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0VBNzByRm9mcVpndDljNkMrSklBL3JSZFBTVmdmcXhnK1d6VStzbWtuMjQwOWdydGpDbmQzMVF6a1FFa2tBUUhHWVpJWDJwWk1pcDUzNkw3cDFRZGcwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5Njc1ODI5CWZpbGU6U290cmljZV8wLjEuMjFfeDY0LXNldHVwLmV4ZQpoeWVTSUNCci9HdjF5eVMraS8zNmd6VFYySTRTYmVPUkpNTFZ4bkpFQVV4cVpQOHZPZFB4U2laQytJT0tYUTJmeU5uUDd1QTZOVFR3MTU1bEpuMGFBQT09Cg=="
+      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.22/Sotrice_0.1.22_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0tjSmwvMVVHVlgrYjErSFc1REtHbWx6VFp0VzZFb0R4M2czSlhSc2k5R0dYbk5ISUVCTGFLcVpjSWR4a0dwcUo4NXhKUG1sTFFaYU5vTEwwRjNSend3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5Njc3NTY5CWZpbGU6U290cmljZV8wLjEuMjJfeDY0LXNldHVwLmV4ZQpzUFR0dFV0SmtQQ21mRVVlTHFXMFZDU1ljdnJPcCtXeFlYcXZhdTBUcEN2aWplWkJYTzF4UHBFU2JDWUxDZGU2bEg1bjVhN3hNZkd2dW1kbnpkNDlBZz09Cg=="
     },
     "darwin-x86_64": { "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases", "signature": "" },
     "darwin-aarch64": { "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases", "signature": "" },

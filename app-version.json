@@ -1,4 +1,4 @@
 {
-  "version": "0.1.21",
-  "notes": "Class-picker delete (removes old test classes that piled up with no cleanup path), more grid-item min-h-0 scroll fixes (course material, right-hand Students/Groups/AI tabs, class picker), a real styled scrollbar instead of the default OS one, presentation-button placement fixes (a findable 'Present' button, and the always-visible exit button moved off the dashboard's own content), and a templated (non-AI, no cost) question generator per difficulty tier."
+  "version": "0.1.22",
+  "notes": "Collapsible Live Statistics section (gives the student roster real vertical room instead of just a taller inner scrollbar), and Sotrice now ships with zero preinstalled spins -- a fresh install's Toolbox starts genuinely empty, everything comes from the Marketplace."
 }
