@@ -1,4 +1,4 @@
 {
-  "version": "0.1.18",
-  "notes": "Real cross-device networking for the math classroom (LAN binding, a class-code access gate, LAN-IP display, real host/port/code join flow), independent multi-instance support, kiosk-mode student lock + teacher presentation mode + per-class persistence, and a Stage 1 content rebuild: free-response questions, hints, and a real question-authoring UI in the teacher dashboard. Also fixes a permanent \"waiting for the class session to start\" hang caused by a startup race in the frontend's attribute-push handling."
+  "version": "0.1.19",
+  "notes": "Fixes a broken 0.1.18 release: the installer was missing WebView2Loader.dll, a Windows system component the app needs just to start -- it failed to launch at all right after installing. Rebuilt with the correct build target (--target x86_64-pc-windows-gnu) and verified the DLL is genuinely present inside the installer this time before publishing, instead of just trusting a green build."
 }
