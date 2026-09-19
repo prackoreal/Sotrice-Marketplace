@@ -10,13 +10,25 @@ Class identity: every attribute math_teacher.py reads or writes is
 class_attr()-scoped (`f"{name}:{class_code}"`) except class_code itself
 (see math_teacher.py's own docstring) — so this file waits for a
 teacher's bare class_code push before it can subscribe to or write
-anything else. Picks whichever class_code it sees first, same
-"there's exactly one math-teacher control entity in practice, but this
-never assumes that" stance the rest of this file already took before
-class identity existed — good enough for local single-class testing,
-which is this simulated bot's only real job; a real student picks a
-specific class through the actual join-code UI instead (see
-MathStudentView.tsx), which already speaks this same scoped protocol.
+anything else.
+
+Which class: `subscribe(..., replay=True)` fires once for EVERY
+Entity that already has class_code set (see sotrice_client.py's own
+docstring on replay) — so with several math-teacher instances running
+at once, this bot sees ALL of their class codes, not just one. It
+collects whatever arrives in a short settle window after the first one
+and then picks UNIFORMLY AT RANDOM among them, so several locally-
+started bots spread across the currently-running classes instead of
+all piling into whichever teacher happened to publish first (the
+original behavior here — keeping only the first value seen — meant
+every bot started in the same window landed in the same class, since
+the server's replay order is effectively fixed within one run). Only
+classes already running by the end of that window are candidates; one
+started later is invisible to a bot that already picked. Good enough
+for local testing, which is this simulated bot's only real job; a real
+student picks a SPECIFIC class through the actual join-code UI instead
+(see MathStudentView.tsx), which already speaks this same scoped
+protocol and isn't affected by any of this.
 
 Entities published:
   Its own entity, kind="math_student":
@@ -73,6 +85,12 @@ from sotrice_client import World
 MIN_THINK_SECONDS = 2.0
 MAX_THINK_SECONDS = 8.0
 DEFAULT_TIER = "medium"
+# How long to keep collecting class_code replay pushes after the first
+# one before picking — long enough for a handful of concurrently-running
+# teachers' replay pushes to all land (they're ordinary pushes, subject
+# to the same dispatch-thread queueing as anything else), short enough
+# a single-class run barely notices the delay.
+CLASS_DISCOVERY_SECONDS = 0.5
 
 
 def random_name() -> str:
@@ -90,18 +108,21 @@ with World() as world:
     ])
 
     # Waits for a teacher's bare class_code push (see the module
-    # docstring) — first one seen wins, same "there's exactly one in
-    # practice" assumption already used everywhere else in this file.
-    class_code: str | None = None
+    # docstring) — collects every distinct one seen (replay fires once
+    # per currently-running teacher entity, see sotrice_client.py) and,
+    # once at least one has shown up, gives stragglers a short window to
+    # arrive too before picking uniformly at random among all of them.
+    known_class_codes: list[str] = []
 
     def on_class_code(entity, attribute, value, source):
-        global class_code
-        if class_code is None and isinstance(value, str):
-            class_code = value
+        if isinstance(value, str) and value not in known_class_codes:
+            known_class_codes.append(value)
 
     world.subscribe("class_code", on_class_code, replay=True)
-    while class_code is None:
+    while not known_class_codes:
         time.sleep(0.1)
+    time.sleep(CLASS_DISCOVERY_SECONDS)
+    class_code = random.choice(known_class_codes)
 
     def class_attr(attr_name: str) -> str:
         """Mirrors math_teacher.py's own class_attr() exactly."""
@@ -195,6 +216,18 @@ with World() as world:
     world.subscribe(class_attr("scoreboard_enabled"), on_scoreboard_enabled, replay=True)
     world.subscribe(class_attr("scoreboard"), on_scoreboard, replay=True)
 
+    def current_question_type() -> str:
+        # Defaults to multiple_choice, matching every pre-existing
+        # teacher this file already worked against (an older
+        # question_by_tier entry, or the plain fallback shape, never
+        # carried a "type" at all -- both mean the same thing this
+        # always assumed).
+        if my_tier and my_tier in question_by_tier:
+            type_ = question_by_tier[my_tier].get("type")
+            if isinstance(type_, str):
+                return type_
+        return "multiple_choice"
+
     def current_question_options() -> list:
         if my_tier and my_tier in question_by_tier:
             options = question_by_tier[my_tier].get("options")
@@ -202,11 +235,24 @@ with World() as world:
                 return options
         return fallback_options
 
+    def guess_free_response_answer() -> str:
+        # This bot never learns the real answer (math_teacher.py never
+        # publishes accepted_answers anywhere a student can read -- see
+        # its own module docstring's "Authoring" section), so it can't
+        # actually try to get a free_response question right the way it
+        # picks a plausible-looking option for multiple_choice. A short
+        # random numeric guess is enough to prove the free_response
+        # answer/grading/tally path actually moves end to end without
+        # this bot pretending to know something it structurally can't.
+        return str(random.randint(0, 99))
+
     try:
         while True:
             time.sleep(0.5)
+            question_type = current_question_type()
             options = current_question_options()
-            if current_index is not None and current_index != answered_index and options:
+            has_question = bool(options) if question_type == "multiple_choice" else current_index is not None
+            if current_index is not None and current_index != answered_index and has_question:
                 # Snapshot before the think-delay: question_index/
                 # options/my_tier can all advance to the NEXT question
                 # while this student is "thinking" about the current
@@ -214,18 +260,23 @@ with World() as world:
                 # what they were actually looking at, not whatever's
                 # current by the time they finish.
                 answering_index = current_index
+                answering_type = question_type
                 answering_options = options
                 answering_tier = my_tier if my_tier else DEFAULT_TIER
                 time.sleep(random.uniform(MIN_THINK_SECONDS, MAX_THINK_SECONDS))
-                option = random.randrange(len(answering_options))
-                world.set_attribute(
-                    me,
-                    class_attr("answer"),
-                    {"question_index": answering_index, "option": option, "tier": answering_tier},
-                )
+                payload = {"question_index": answering_index, "tier": answering_tier}
+                if answering_type == "multiple_choice":
+                    if not answering_options:
+                        continue  # nothing to pick from -- wait for the next question instead
+                    payload["option"] = random.randrange(len(answering_options))
+                else:
+                    payload["text"] = guess_free_response_answer()
+                world.set_attribute(me, class_attr("answer"), payload)
                 answered_index = answering_index
                 print(
-                    f"[{name}] answered question {answering_index} with option {option} (tier={answering_tier})",
+                    f"[{name}] answered question {answering_index} with "
+                    f"{'option ' + str(payload['option']) if answering_type == 'multiple_choice' else 'text ' + repr(payload['text'])} "
+                    f"(tier={answering_tier})",
                     flush=True,
                 )
     except KeyboardInterrupt:

@@ -1,4 +1,4 @@
 {
-  "version": "0.1.23",
-  "notes": "A crashed teacher process is now detectable instead of the dashboard silently pretending everything's fine. Existing installs are now actually pruned of preinstalled spins. Real math notation (KaTeX) now renders in question text, options, and hints. macOS build also available (Apple Silicon + Intel universal, smoke-tested on real hardware)."
+  "version": "0.1.24",
+  "notes": "Math classroom content now runs in its own sandboxed plugin UI (real teacher dashboard + student answer UI). A real cross-device join fix, two new question types (multi-select, matching-pair with drag-and-drop) with a real authoring UI, a 2D/3D graphing plugin, Math Plugin auto-installed by default, a real sotrice:// join link, and a LaMa PDF upload UI. Windows only this release -- macOS/Linux builds not yet re-cut for 0.1.24."
 }

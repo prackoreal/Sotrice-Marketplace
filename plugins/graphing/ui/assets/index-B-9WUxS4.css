@@ -1,0 +1,1 @@
+:root{--lightningcss-light:initial;--lightningcss-dark: ;color-scheme:light dark;font-family:system-ui,-apple-system,Segoe UI,sans-serif}@media (prefers-color-scheme:dark){:root{--lightningcss-light: ;--lightningcss-dark:initial}}html,body,#root{color:#e6e9ef;background:#0e1116;width:100%;height:100%;margin:0}*{box-sizing:border-box}

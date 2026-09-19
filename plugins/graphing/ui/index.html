@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Graphing</title>
+    <script type="module" crossorigin src="./assets/index-JCavWGEX.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-B-9WUxS4.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- Sotrice's own client bridge -- ships with the installed app, not
+         with this plugin, so it's referenced by this fixed, well-known
+         path rather than bundled. See clients/js/sotrice-ui-client.js.
+         Served by spin_ui.rs at the FIXED path "_client/..." regardless
+         of which plugin's bundle references it (it never resolves against
+         this plugin's own install root), so this exact tag is identical
+         across every plugin's UI, copied verbatim from math-teacher-ui. -->
+    <script src="/_client/sotrice-ui-client.js"></script>
+  </body>
+</html>
