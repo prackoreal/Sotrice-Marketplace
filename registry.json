@@ -3,7 +3,7 @@
   "plugins": [
     {
       "type": "math-teacher",
-      "version": "0.4.1",
+      "version": "0.4.2",
       "description": "Runs a math class: a real question-authoring UI (multiple choice, free response, multi-select, matching-pair with distractors), adaptive per-student difficulty (off by default; teacher-toggleable automatic/manual, asymmetric -- 3-in-a-row correct to move up a tier, 2-in-a-row wrong to move down), a correctness streak and opt-in scoreboard per student, live mid-session editing via a teacher_command control attribute, a per-class identity (class_code/class_name) so more than one class can run on the same machine without their data mixing, and persistence -- a class's identity, roster, and question bank survive the process exiting, and can be resumed later. Install math-student alongside it, or have a real student join by code from their own device, to see the tally move.",
       "concepts": [
         "MathClass"
