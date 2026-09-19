@@ -40,12 +40,10 @@
   "packages": [
     {
       "name": "Math Plugin",
-      "version": "0.4.0",
-      "description": "A teacher runs a real math class (multiple choice, free response, multi-select, matching-pair with distractors, adaptive difficulty, streaks, an opt-in scoreboard, live mid-session editing, per-class identity, persistence across restarts) and a real student joins by code from their own device to answer live. Includes a 2D/3D graphing calculator and a same-machine testing bot (math-student) alongside the teacher.",
+      "version": "0.4.1",
+      "description": "A teacher runs a real math class (multiple choice, free response, multi-select, matching-pair with distractors, adaptive difficulty, streaks, an opt-in scoreboard, live mid-session editing, per-class identity, persistence across restarts) and a real student joins by code from their own device to answer live. The math-student testing bot and the 2D/3D graphing calculator are both separate, optional plugins -- install them individually if you want them; they no longer come bundled in by default.",
       "includes": [
-        "math-teacher",
-        "math-student",
-        "graphing"
+        "math-teacher"
       ]
     }
   ]
