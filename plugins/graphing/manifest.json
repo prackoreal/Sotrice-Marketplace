@@ -1,6 +1,6 @@
 {
   "type": "graphing",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A 2D/3D graphing calculator, Desmos/GeoGebra-style. Plot one or more functions (pan/zoom) or a 3D surface (orbit/zoom) by writing plain math expressions to its \"graphs\" attribute -- usable standalone, or driven by another plugin over Core the same way city-routing feeds city-residents a route.",
   "concepts": ["Graphing"],
   "depends_on": [],
@@ -13,6 +13,5 @@
     "modes": ["widget", "fullview"],
     "connect_src": [],
     "joinable": false
-  },
-  "package": "Math Plugin"
+  }
 }

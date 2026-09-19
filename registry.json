@@ -14,7 +14,7 @@
     },
     {
       "type": "math-student",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "description": "One simulated student in a math-teacher class, for same-machine testing: watches its assigned question (tiered if the teacher's adaptive difficulty is on) and answers after a short random 'thinking' delay. A REAL student doesn't install this -- they join a live class by code from math-teacher's own UI, which answers all four question types (multiple choice, free response, multi-select, matching-pair by click or drag-and-drop) for real. Install several instances of this bot to populate math-teacher's live tally for testing without real students.",
       "concepts": [
         "Students"
@@ -27,7 +27,7 @@
     },
     {
       "type": "graphing",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "A 2D/3D graphing calculator, Desmos/GeoGebra-style. Plot one or more functions (pan/zoom) or a 3D surface (orbit/zoom) by writing plain math expressions to its \"graphs\" attribute -- usable standalone, or driven by another plugin over Core the same way city-routing feeds city-residents a route.",
       "concepts": [
         "Graphing"
