@@ -35,6 +35,19 @@
       "depends_on": [],
       "author": "prackoreal",
       "file": "graphing.spin"
+    },
+    {
+      "type": "lama-bank",
+      "version": "0.1.0",
+      "description": "A headless companion plugin for math-teacher, same relationship city-weather has to city-layout: watches a folder of real LaMa (CC BY 3.0) worksheet PDFs, parses them into a browsable catalog of ready-to-use questions (metadata only -- titel/Grundkompetenz/Klasse/Quelle/Aufgabenformat -- never the full question content until it's actually filed into a class), and files a chosen subset into a live math-teacher class's own bank through the exact same authoring_command import channel a human-driven import already uses. Not a UI of any kind -- install it alongside math-teacher and drive it from math-teacher's own LaMa upload panel.",
+      "concepts": [
+        "LaMaBank"
+      ],
+      "depends_on": [
+        "MathClass"
+      ],
+      "author": "prackoreal",
+      "file": "lama-bank.spin"
     }
   ],
   "packages": [
