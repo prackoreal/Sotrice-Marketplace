@@ -1,15 +1,15 @@
 {
-  "version": "0.1.25",
-  "notes": "Fixes two real bugs: the Marketplace panel's \"Update all\" could silently report everything current when it wasn't (raw.githubusercontent.com's edge cache was serving stale registry.json/.spin files no matter how the request was shaped -- now resolves and fetches from a commit-SHA-pinned URL instead, which can't go stale), and the app installer was bundling ~445MB of unrelated plugin-UI dev dependencies that also got copied into every fresh install's %APPDATA% on first launch -- installer is back to a normal size. Also ships the clipboard-write grant for the teacher dashboard's \"Copy join link\" button, and a fix so a new plugin dropped on the canvas doesn't keep spawning farther away forever.",
-  "pub_date": "2026-09-24T14:10:40Z",
+  "version": "0.1.26",
+  "notes": "Cross-device join case-sensitivity fix, LaMa course-material picker, matching_pair authoring UI, Stage 2 student identity UI.",
+  "pub_date": "2026-09-26T17:18:18Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.25/Sotrice_0.1.25_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0ljYzZhTko2R1d6blUvcm0yVndoOVdEd3JtdmNVeTFtUXUvQnpqOFFUMzVHVkc2VEo0MzVIUEV6MjZxUXFHTDlnQXlzQWIrMGhXV3k0bW0weTJTV3d3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwMjU4OTY0CWZpbGU6U290cmljZV8wLjEuMjVfeDY0LXNldHVwLmV4ZQpoVmxBYkllMGtocFZqT0JFbEZoNWlYRTE4aWxaUmcxWmNxaWVWYldPa1QxTmQrMnFMSUh5QUhtZG9hSVE4ZW41NFVsbmduR3dMdWxLY0Y5Z1FoTTVDQT09Cg=="
+      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.26/Sotrice_0.1.26_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY1BFa0k2L1E4Z2RDaGdQVVpmSTBMZUZhVktuN2RTSWVKaEVseWRGSHc4Q2Z0d1hlY3hMcjUveFBYWHFTSlhNYmdPbVhUc3o3aiswckJqTHZuWVJsQ0FRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwNDQyMzcwCWZpbGU6U290cmljZV8wLjEuMjZfeDY0LXNldHVwLmV4ZQpteGl4MGNDaVZhSjk0eHF1cVRPcml3Z0NXcGV2dzRtWXNWakxLSVdaS3A2Mmp0UXRPMkdYNzdPWnBEdkxWaUlKb1BzUjNLRHNxbEExZmNOMXloMG5CQT09Cg=="
     },
     "windows-x86_64-nsis": {
-      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.25/Sotrice_0.1.25_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY0ljYzZhTko2R1d6blUvcm0yVndoOVdEd3JtdmNVeTFtUXUvQnpqOFFUMzVHVkc2VEo0MzVIUEV6MjZxUXFHTDlnQXlzQWIrMGhXV3k0bW0weTJTV3d3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwMjU4OTY0CWZpbGU6U290cmljZV8wLjEuMjVfeDY0LXNldHVwLmV4ZQpoVmxBYkllMGtocFZqT0JFbEZoNWlYRTE4aWxaUmcxWmNxaWVWYldPa1QxTmQrMnFMSUh5QUhtZG9hSVE4ZW41NFVsbmduR3dMdWxLY0Y5Z1FoTTVDQT09Cg=="
+      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.26/Sotrice_0.1.26_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNHVDenVPMGJNY1BFa0k2L1E4Z2RDaGdQVVpmSTBMZUZhVktuN2RTSWVKaEVseWRGSHc4Q2Z0d1hlY3hMcjUveFBYWHFTSlhNYmdPbVhUc3o3aiswckJqTHZuWVJsQ0FRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwNDQyMzcwCWZpbGU6U290cmljZV8wLjEuMjZfeDY0LXNldHVwLmV4ZQpteGl4MGNDaVZhSjk0eHF1cVRPcml3Z0NXcGV2dzRtWXNWakxLSVdaS3A2Mmp0UXRPMkdYNzdPWnBEdkxWaUlKb1BzUjNLRHNxbEExZmNOMXloMG5CQT09Cg=="
     },
     "darwin-x86_64": { "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases", "signature": "" },
     "darwin-aarch64": { "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases", "signature": "" },
