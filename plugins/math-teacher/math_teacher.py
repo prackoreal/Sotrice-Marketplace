@@ -21,6 +21,24 @@ each other's questions, answers, or roster. A math_student instance
 (or the real student-facing UI) has to know the same code to talk to
 this specific class at all.
 
+Starting a class: a freshly-started class begins in a LOBBY —
+class_started (bool, class_attr()-scoped, defaults False) is published
+False, and next_question() is deliberately NOT called yet, so no
+question is broadcast and the per-question deadline doesn't tick. A
+joining student publishes class_attr("student_joined") on their own
+entity the moment they've discovered class_code (see the real
+student-UI's own join flow) — this is now what admits a student into
+known_students/the roster (see ensure_student), not their first answer,
+so the teacher's live roster (student_tier/student_names) already shows
+who's waiting in the lobby before anyone's answered anything. The
+teacher explicitly starts the class with teacher_command
+{"cmd": "start_class"}, which flips class_started to True, publishes
+it, and calls next_question() for the first time — every already-joined
+student receives question 1 on the exact same push, Kahoot-style.
+RESUMING a persisted class (on_load_class) skips the lobby entirely and
+sets class_started True immediately — continuing an in-progress class
+is not "starting" one.
+
 Persistence: a class's identity, roster, and question bank now survive
 the process exiting, under %APPDATA%\\Sotrice\\classes\\<class_code>\\ (or
 SOTRICE_CLASSES_DIR, if set — the same env-override idiom
@@ -44,12 +62,15 @@ Four files per persisted class:
     (never rewritten wholesale) the first time each student entity is
     ever admitted via ensure_student — the same place this file already
     tracks "who's a known student" for the live tally, not a new
-    detection mechanism. "name" is best-effort, filled from a bare
-    (unnamespaced) "student_name" this file already watches for exactly
-    this purpose (see on_student_name) — a real student's own name is
-    published well before its first answer, so this is normally
-    accurate, but falls back to a placeholder if it somehow isn't known
-    yet rather than blocking the join from being recorded at all.
+    detection mechanism. Admission now happens the moment a student
+    publishes class_attr("student_joined") (see "Starting a class"
+    above), not on their first answer — "joined_at" means what it says.
+    "name" is best-effort, filled from a bare (unnamespaced)
+    "student_name" this file already watches for exactly this purpose
+    (see on_student_name) — a real student's own name is published well
+    before it joins a specific class, so this is normally accurate, but
+    falls back to a placeholder if it somehow isn't known yet rather
+    than blocking the join from being recorded at all.
   questions.json — {"questions": [question, ...]} — this class's OWN
     copy of the question bank, a FLAT list (not grouped by tier the way
     the in-memory rotation reads it — see "Question shape" below for
@@ -207,6 +228,9 @@ Entities published:
   (list[{"code", "name"}], bare/unnamespaced — see the Persistence
   section above):
     All namespaced via class_attr() below:
+    class_started (bool) — see "Starting a class" above. False from a
+      fresh class's own first publish until "start_class"; True from the
+      first publish onward for a RESUMED one.
     question_text, question_options (list[str], [] except for
       multiple_choice/multi_select — multi_select's own options list,
       same as multiple_choice's, minus which ones are correct),
@@ -291,6 +315,17 @@ Entities published:
       lets the dashboard's roster/groups views show a real name instead
       of a bare "Student <id>" placeholder. Only ever has an entry for a
       student this class's own known_students already contains.
+    student_persistent_ids ({str(student_id): str}) — same idea as
+      student_names, mirroring the bare student_persistent_id a real
+      student's own UI publishes once its Stage 2 profile has loaded
+      (see math-student-ui's studentProfile.ts/mathStudentState.ts —
+      core/src/identity.rs's StudentId). Lets the teacher dashboard map
+      a live-session entity id to the persistent profile it needs for
+      GetStudentProfile/SetStudentCanLeaveSession/
+      SetStudentCanSeeOtherSpins. Absent for a simulated math_student.py
+      bot (which has no Stage 2 profile at all) — a dashboard consumer
+      treats a missing entry here as "no persistent profile to manage
+      permissions for", not an error.
     authoring_question_bank (list[question], see "Question shape"
       above — correct_index/accepted_answers INCLUDED) and
       authoring_chapters (list[chapter], see "Chapters" above) — the
@@ -338,14 +373,18 @@ any number of math_student instances for THIS class can exist):
     is adopted immediately. student_tier writes only ever touch a
     student this plugin already knows about, and only to a real tier.
 
-    teacher_command — {"cmd": "next" | "replace" | "extend", ...}: the
-    LIVE-EDIT-what's-on-screen-right-now channel, deliberately separate
-    from authoring_command below (which edits the class's own saved
-    question BANK, not just this round's display) — see "Authoring"
-    above for why they're kept apart, and note this one is NOT
-    loopback-restricted (a pre-existing gap: knowing the class code is
-    still all it takes to send these, same trust level the bottom
-    SECURITY NOTE already documents — untouched by this stage).
+    teacher_command — {"cmd": "start_class" | "next" | "replace" |
+    "extend", ...}: the LIVE-EDIT-what's-on-screen-right-now channel,
+    deliberately separate from authoring_command below (which edits the
+    class's own saved question BANK, not just this round's display) —
+    see "Authoring" above for why they're kept apart, and note this one
+    is NOT loopback-restricted (a pre-existing gap: knowing the class
+    code is still all it takes to send these, same trust level the
+    bottom SECURITY NOTE already documents — untouched by this stage).
+      "start_class" — see "Starting a class" above. No-op if the class
+        has already started (a second/racing click must not re-broadcast
+        question 1 and reset the deadline out from under students
+        already mid-question).
       "next" — advance to the next round immediately, timer resets.
       "replace" — {"cmd": "replace", "text": str, "tier": str
         (optional, required when more than one tier is active), "type"
@@ -1042,6 +1081,15 @@ with World() as world:
     # Whether THIS class's code/name/question-bank have ever been
     # written to disk yet — see ensure_persisted().
     class_persisted = False
+    # The lobby gate — see the module docstring's "Starting a class"
+    # section. False for a freshly-started class: students can join and
+    # show up in the roster, but no question is broadcast and the
+    # per-question deadline doesn't tick, until the teacher explicitly
+    # sends teacher_command {"cmd": "start_class"}. True immediately for
+    # a RESUMED class (on_load_class) — resuming an in-progress class
+    # means picking up where it left off, not going through the lobby
+    # again.
+    class_started = False
 
     def questions_for_tier(tier: str) -> list[dict]:
         """Every question of `tier` next_question() may currently draw
@@ -1104,6 +1152,12 @@ with World() as world:
     # known_students already contains. Capped the same way and for the
     # same reason as known_students itself.
     student_name_by_id: dict[int, str] = {}
+    # entity -> Stage 2 persistent StudentId, from any real student UI's
+    # bare "student_persistent_id" (see on_student_persistent_id) — same
+    # global-across-every-class, same-cap reasoning as student_name_by_id
+    # above. A simulated math_student.py bot never publishes this, so an
+    # entity can be a known student with no entry here at all.
+    student_persistent_id_by_id: dict[int, str] = {}
 
     def ensure_student(entity: int) -> bool:
         """Registers `entity` as a known/tracked student if it isn't
@@ -1261,11 +1315,21 @@ with World() as world:
         # missing here), so an entity whose name hasn't arrived yet is
         # simply omitted rather than treated as an error.
         name_map = {str(e): student_name_by_id[e] for e in known_students if e in student_name_by_id}
+        # Same "omit rather than error" reasoning as name_map above, plus
+        # a real absence case: a simulated math_student.py bot never
+        # publishes student_persistent_id at all (no Stage 2 profile),
+        # so it's expected to be missing here even once known.
+        persistent_id_map = {
+            str(e): student_persistent_id_by_id[e]
+            for e in known_students
+            if e in student_persistent_id_by_id
+        }
         world.set_many([
             (control, class_attr("student_tier"), tier_map),
             (control, class_attr("student_score"), score_map),
             (control, class_attr("student_streak"), streak_map),
             (control, class_attr("student_names"), name_map),
+            (control, class_attr("student_persistent_ids"), persistent_id_map),
         ])
         if scoreboard_enabled:
             publish_scoreboard()
@@ -1575,6 +1639,33 @@ with World() as world:
             return
         student_name_by_id[entity] = value
 
+    def on_student_persistent_id(entity, attribute, value, source):
+        # Bare/global, same reasoning as on_student_name above — a real
+        # student's own UI (not a simulated bot) publishes this once its
+        # Stage 2 profile has loaded (see math-student-ui's
+        # mathStudentState.ts). Mirrored into student_persistent_ids the
+        # same way student_name is mirrored into student_names — see
+        # publish_student_state.
+        if not isinstance(value, str) or not value:
+            return
+        if entity not in student_persistent_id_by_id and len(student_persistent_id_by_id) >= MAX_TRACKED_STUDENTS:
+            return
+        student_persistent_id_by_id[entity] = value
+
+    def on_student_joined(entity, attribute, value, source):
+        """A student announcing presence for THIS class (class_attr()-
+        scoped, unlike bare student_name above) — see the module
+        docstring's "Starting a class". Admits them into known_students
+        immediately via the same ensure_student() on_answer already
+        uses, so the lobby-phase roster (student_tier/student_names)
+        reflects who's actually joined, not just who's already
+        answered. `value` itself carries no information; only the
+        entity/source of the push matters, same idiom class_code's own
+        bare discovery uses."""
+        if not ensure_student(entity):
+            return
+        publish_student_state()
+
     def on_adaptive_mode_external(entity, attribute, value, source):
         # Ignore our own pushes echoing back — only adopt a mode set
         # by someone else (a teacher UI toggling the control).
@@ -1752,13 +1843,25 @@ with World() as world:
         # this file's bottom note), anything connected can send this.
         # Shape-check everything; on any mismatch, silently drop
         # rather than raise.
-        global elapsed, question_deadline
+        global elapsed, question_deadline, class_started
         if entity != control or not isinstance(value, dict):
             return
         ensure_persisted()  # a teacher actively driving this session is real use
         cmd = value.get("cmd")
 
-        if cmd == "next":
+        if cmd == "start_class":
+            # No-op if already started — a second click (a race between
+            # two teacher windows, or just a double-click) must not
+            # re-broadcast question 1 and reset the deadline out from
+            # under students already mid-question.
+            if class_started:
+                return
+            class_started = True
+            world.set_attribute(control, class_attr("class_started"), True)
+            elapsed = 0.0
+            next_question()
+
+        elif cmd == "next":
             next_question()
             elapsed = 0.0
 
@@ -2078,6 +2181,10 @@ with World() as world:
         publish under a discarded temporary code again) ones — see the
         module docstring's "Resuming" section."""
         world.subscribe(class_attr("answer"), on_answer, replay=True)
+        # replay=True: a teacher process that (re)subscribes slightly
+        # after a student already published this (same race window
+        # "answer" above already handles) must still admit them.
+        world.subscribe(class_attr("student_joined"), on_student_joined, replay=True)
         world.subscribe(class_attr("adaptive_mode"), on_adaptive_mode_external, replay=False)
         world.subscribe(class_attr("student_tier"), on_student_tier_external, replay=False)
         world.subscribe(class_attr("scoreboard_enabled"), on_scoreboard_enabled_external, replay=False)
@@ -2099,7 +2206,7 @@ with World() as world:
         previously-persisted class's code; entity-targeted at THIS
         instance's own control entity, same idiom as teacher_command."""
         global class_code, class_name, class_question_bank, class_chapters, class_active_chapter, class_persisted
-        global adaptive_mode, scoreboard_enabled, leave_locked, elapsed
+        global adaptive_mode, scoreboard_enabled, leave_locked, elapsed, class_started
         if entity != control or not isinstance(value, str):
             return
         code = value.strip().upper()
@@ -2129,12 +2236,17 @@ with World() as world:
         adaptive_mode = "off"
         scoreboard_enabled = False
         leave_locked = False
+        # Resuming skips the lobby entirely — see the module docstring's
+        # "Starting a class". This class was already running; continuing
+        # it is not "starting" one.
+        class_started = True
 
         world.set_many([
             (control, "class_code", class_code),
             (control, "class_name", class_name),
         ])
         world.set_attribute(control, class_attr("scoreboard"), [])
+        world.set_attribute(control, class_attr("class_started"), True)
         subscribe_class_scoped()
         publish_known_classes()
         publish_authoring_state()
@@ -2179,13 +2291,24 @@ with World() as world:
     # the module docstring on why load_class can't be class_attr()
     # scoped, and why student_name is deliberately global too).
     world.subscribe("student_name", on_student_name, replay=True)
+    world.subscribe("student_persistent_id", on_student_persistent_id, replay=True)
     world.subscribe("load_class", on_load_class, replay=False)
     world.subscribe("delete_class", on_delete_class, replay=False)
 
-    next_question()
+    # A fresh class starts in the lobby — see the module docstring's
+    # "Starting a class". No next_question() here; the first broadcast
+    # only happens once the teacher sends {"cmd": "start_class"}. A
+    # RESUME (on_load_class) is a genuinely separate, later external
+    # trigger — nothing calls "load_class" during this synchronous
+    # startup sequence, so there's no race with class_started still
+    # being False here; on_load_class sets it True and calls
+    # next_question() itself, whenever a resume actually happens.
+    world.set_attribute(control, class_attr("class_started"), class_started)
     try:
         while True:
             time.sleep(TICK_SECONDS)
+            if not class_started:
+                continue
             elapsed += TICK_SECONDS
             if elapsed >= question_deadline:
                 elapsed = 0.0
@@ -2199,8 +2322,9 @@ with World() as world:
 #
 # Every input this file actually receives from the outside — "answer",
 # "adaptive_mode", "student_tier", "scoreboard_enabled", "leave_locked",
-# "teacher_command", "authoring_command" (all class_attr()-scoped), and
-# "student_name"/"load_class" (bare) — is validated and bounded above:
+# "teacher_command", "authoring_command", "student_joined" (all
+# class_attr()-scoped), and "student_name"/"student_persistent_id"/
+# "load_class" (bare) — is validated and bounded above:
 # shape-checked,
 # range-checked against the actual active question for a given tier,
 # capped at MAX_TRACKED_STUDENTS via ensure_student (the single gate

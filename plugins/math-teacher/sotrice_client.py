@@ -1,14 +1,29 @@
 """Python client for the Sotrice Core server.
 
-Talks to sotrice-server over TCP using one JSON object per line in each
-direction. Nothing here is Sotrice-specific magic — any language that can
-open a socket and read/write JSON can do exactly this, by design.
+Talks to sotrice-server over TCP. In each direction, the wire carries a
+sequence of self-describing frames: an ordinary frame is one JSON object
+terminated by "\n" (the original, still-default "JSON Lines" shape —
+any language that can open a socket and read/write JSON can do exactly
+this). A connection that opts into the binary fast path (see `identify`'s
+`wire` parameter) may ALSO receive raw binary frames, each starting with
+a single 0x00 byte (never a valid first byte of a JSON document) followed
+by a 4-byte little-endian length and that many raw bytes — see
+`_FramedReader` and `_decode_binary_batch`. A connection that never opts
+in never receives one; the plain JSON-lines shape is completely
+unaffected either way, this is purely additive.
 
-Every incoming line has a "kind": "response" (a direct reply to something
-we sent) or "push" (unsolicited, from a subscription, arriving whenever it
-arrives). A background thread reads every line and sorts it into the
-right place — responses go to whichever call is waiting for one, pushes
-get handed off to a second background thread that runs the registered
+Every incoming JSON frame has a "kind": "response" (a direct reply to
+something we sent), "push" (unsolicited, from an unbatched subscription,
+arriving whenever it arrives), or "push_batch" (unsolicited, from a
+subscription that asked to be batched — see `subscribe`'s `batch_ms` —
+carrying an "updates" array of the same per-event shape a "push" would
+have sent one at a time). A binary frame decodes to the same information
+as a "push_batch" would, just more compactly on the wire; either shape
+dispatches through the exact same per-name callbacks, so a subscriber
+never needs to know or care which one arrived. A background thread reads
+every frame and sorts it into the right place — responses go to whichever
+call is waiting for one, pushes (batched or not, JSON or binary) get
+handed off to a second background thread that runs the registered
 callback — so a plugin that never calls `subscribe` never has to think
 about this at all; it still just gets one response per request, in
 order, exactly as before.
@@ -81,6 +96,124 @@ class SotriceError(RuntimeError):
 
 PushCallback = Callable[[int, str, Any, Optional[str]], None]
 
+# Sentinel byte a binary batch frame always starts with — never the first
+# byte of any valid JSON document (0x00 is never whitespace, `{`, `[`,
+# `"`, a digit, `t`/`f`/`n`, or `-`), so `_FramedReader` can always tell
+# the two frame kinds apart with a single byte of lookahead.
+_BINARY_FRAME_MARKER = 0x00
+
+
+class _FramedReader:
+    """Reads the connection's own byte stream and yields one decoded frame
+    at a time — either `("json", <parsed dict>)` or `("binary", <raw
+    bytes>)` — matching the module's own two-frame-kinds docstring.
+    Replaces the earlier plain `socket.makefile("r")` line reader:
+    that only ever worked because every frame used to be a JSON line, and
+    would corrupt (or crash trying to decode invalid UTF-8) the instant a
+    binary batch frame's raw bytes hit it, since a text-mode file object
+    has no way to know some of its bytes aren't meant to be text at all.
+    """
+
+    def __init__(self, sock: socket.socket) -> None:
+        self._socket = sock
+        self._buffer = bytearray()
+
+    def _fill(self, at_least: int) -> bool:
+        """Reads more bytes off the socket into `_buffer` until it holds
+        at least `at_least` bytes, or the connection closes. Returns
+        whether that target was reached (False means the connection
+        closed first)."""
+        while len(self._buffer) < at_least:
+            chunk = self._socket.recv(65536)
+            if not chunk:
+                return False
+            self._buffer.extend(chunk)
+        return True
+
+    def read_frame(self) -> Optional[tuple[str, Any]]:
+        """Returns the next frame, or `None` once the connection has
+        closed with nothing further to deliver."""
+        if not self._fill(1):
+            return None
+        marker = self._buffer[0]
+        if marker == _BINARY_FRAME_MARKER:
+            if not self._fill(5):
+                return None
+            length = int.from_bytes(self._buffer[1:5], "little")
+            if not self._fill(5 + length):
+                return None
+            payload = bytes(self._buffer[5 : 5 + length])
+            del self._buffer[: 5 + length]
+            return ("binary", payload)
+
+        # Plain JSON line: read until (and including) the next b"\n".
+        while True:
+            newline_at = self._buffer.find(b"\n")
+            if newline_at != -1:
+                line = bytes(self._buffer[:newline_at])
+                del self._buffer[: newline_at + 1]
+                text = line.decode("utf-8", errors="replace").strip()
+                if not text:
+                    return self.read_frame()
+                try:
+                    return ("json", json.loads(text))
+                except json.JSONDecodeError:
+                    return self.read_frame()
+            if not self._fill(len(self._buffer) + 1):
+                return None
+
+
+def _decode_binary_batch(payload: bytes) -> list[dict[str, Any]]:
+    """The Python-side decoder for the binary batch format `encode_batch_binary`
+    (server/src/main.rs) produces — see that function's own doc comment
+    for the exact layout. Returns a list of plain dicts shaped exactly
+    like one "push"/`push_batch`-entry each, so the caller never has to
+    special-case where an update actually came from."""
+    if payload[:4] != b"SPB1":
+        raise ValueError("not a recognized binary batch frame")
+    pos = 4
+
+    def read_u16() -> int:
+        nonlocal pos
+        value = int.from_bytes(payload[pos : pos + 2], "little")
+        pos += 2
+        return value
+
+    def read_u32() -> int:
+        nonlocal pos
+        value = int.from_bytes(payload[pos : pos + 4], "little")
+        pos += 4
+        return value
+
+    def read_u64() -> int:
+        nonlocal pos
+        value = int.from_bytes(payload[pos : pos + 8], "little")
+        pos += 8
+        return value
+
+    def read_string(length: int) -> str:
+        nonlocal pos
+        value = payload[pos : pos + length].decode("utf-8")
+        pos += length
+        return value
+
+    name_count = read_u16()
+    names = [read_string(read_u16()) for _ in range(name_count)]
+    source_count = read_u16()
+    sources = [read_string(read_u16()) for _ in range(source_count)]
+    update_count = read_u32()
+
+    updates = []
+    for _ in range(update_count):
+        entity = read_u64()
+        name_index = read_u16()
+        source_index = read_u16()
+        value_len = read_u32()
+        value = json.loads(read_string(value_len))
+        source = None if source_index == 0xFFFF else sources[source_index]
+        updates.append({"entity": entity, "attribute": names[name_index], "value": value, "source": source})
+    return updates
+
 
 class World:
     """A connection to a running sotrice-server, and the operations a
@@ -100,7 +233,7 @@ class World:
         # short of hand-editing this default. Explicit `port=` still
         # wins over the env var, same precedence as any other default.
         self._socket = socket.create_connection((host, port))
-        self._reader = self._socket.makefile("r", encoding="utf-8", newline="\n")
+        self._reader = _FramedReader(self._socket)
         self._send_lock = threading.Lock()
         self._responses: "queue.Queue[dict[str, Any]]" = queue.Queue()
         self._push_handlers: dict[str, list[PushCallback]] = {}
@@ -131,17 +264,28 @@ class World:
 
     def _read_loop(self) -> None:
         try:
-            for line in self._reader:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    message = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if message.get("kind") == "push":
+            while True:
+                frame = self._reader.read_frame()
+                if frame is None:
+                    break
+                kind, payload = frame
+                if kind == "binary":
+                    try:
+                        updates = _decode_binary_batch(payload)
+                    except (ValueError, IndexError, UnicodeDecodeError) as exc:
+                        print(f"sotrice_client: could not decode binary batch frame ({exc!r}), ignoring")
+                        continue
                     # Handed off, not run here — see the module docstring.
+                    for update in updates:
+                        self._push_queue.put(update)
+                    continue
+
+                message = payload
+                if message.get("kind") == "push":
                     self._push_queue.put(message)
+                elif message.get("kind") == "push_batch":
+                    for update in message.get("updates", []):
+                        self._push_queue.put(update)
                 else:
                     self._responses.put(message)
         except OSError:
@@ -157,7 +301,10 @@ class World:
         pushes off `_push_queue` in the exact order the read loop put them
         there and running each one's callbacks — decoupled from socket
         reading so a callback that calls back into World (a request that
-        needs the read thread to deliver its response) can't deadlock."""
+        needs the read thread to deliver its response) can't deadlock.
+        One entry per (entity, attribute, value, source) update, regardless
+        of whether it arrived as its own "push" message or as one entry
+        inside a batched "push_batch"/binary frame — see `_read_loop`."""
         while True:
             message = self._push_queue.get()
             if message is None:  # connection closed, see _read_loop
@@ -186,7 +333,7 @@ class World:
             raise SotriceError(response.get("error", "unknown error"))
         return response
 
-    def identify(self, plugin_type: str, instance_id: Optional[str] = None) -> str:
+    def identify(self, plugin_type: str, instance_id: Optional[str] = None, wire: Optional[str] = None) -> str:
         """Declares this connection's plugin type (e.g. "wayfinding").
         The server assigns back a unique instance name for this specific
         connection (e.g. "wayfinding-1", or "wayfinding-2" if another
@@ -207,11 +354,20 @@ class World:
         value is used instead of letting the server generate one — this
         makes a plugin's Core identity the same string as the launch id
         the UI already has, so stopping it and despawning whatever it
-        drew are the same lookup."""
+        drew are the same lookup.
+
+        `wire`, if set to `"binary"`, opts this connection into the binary
+        fast path for any BATCHED subscription it later registers (see
+        `subscribe`'s `batch_ms`) — see the module docstring and
+        `_FramedReader` for what that changes. Omitted (the default) means
+        every batch this connection receives stays plain JSON, exactly as
+        before this existed."""
         chosen_id = instance_id or os.environ.get("SOTRICE_LAUNCH_ID")
-        request = {"op": "hello", "plugin_type": plugin_type}
+        request: dict[str, Any] = {"op": "hello", "plugin_type": plugin_type}
         if chosen_id:
             request["instance_id"] = chosen_id
+        if wire:
+            request["wire"] = wire
         self.instance_name = self._request(request)["name"]
         return self.instance_name
 
@@ -260,6 +416,17 @@ class World:
             "has"
         ]
 
+    def dump_entity(self, entity: int) -> list[dict]:
+        """A debug/inspector-only escape hatch, NOT a discovery mechanism
+        an ordinary plugin should use instead of `subscribe` — see that
+        method's own doc comment for why "agree on a name, subscribe
+        once" is this project's real answer to "what exists". Returns
+        every attribute CURRENTLY set on `entity`, each as
+        `{"name": ..., "value": ..., "source": ...}` — a one-shot
+        snapshot (call again for a live-updating view, there is no
+        subscription form of this)."""
+        return self._request({"op": "dump_entity", "entity": entity})["attributes"]
+
     def mute_output(self, plugin: str, attribute: str) -> None:
         """Forbids `plugin` (an instance name, e.g. "wayfinding-1") from
         WRITING `attribute` from now on — its set_attribute calls for that
@@ -278,7 +445,13 @@ class World:
             {"op": "unmute_output", "plugin": plugin, "attribute": attribute}
         )
 
-    def subscribe(self, name: str, callback: PushCallback, replay: bool = False) -> None:
+    def subscribe(
+        self,
+        name: str,
+        callback: PushCallback,
+        replay: bool = False,
+        batch_ms: Optional[int] = None,
+    ) -> None:
         """Registers `callback(entity, name, value, source)` to fire every
         time ANY Entity has `name` set, from this point forward —
         including Entities that don't exist yet. No need to know what
@@ -292,9 +465,22 @@ class World:
         for every Entity that already has `name` set right now — the fix
         for "a late-joining viewer sees nothing." Default False, since a
         plugin that only cares about future changes shouldn't pay for a
-        replay it didn't ask for."""
+        replay it didn't ask for.
+
+        `batch_ms`, if set, asks the server to coalesce this
+        subscription's pushes into one combined message every `batch_ms`
+        milliseconds instead of sending one message per event — built for
+        a fast-changing population (hundreds of physics bodies publishing
+        position/velocity at 60Hz) where per-event framing overhead
+        dominates. `callback` still fires once per individual update, in
+        the same order they happened — batching only changes how many
+        wire messages that costs, never what the caller sees. Default
+        `None` keeps today's exact immediate-push behavior."""
         self._push_handlers.setdefault(name, []).append(callback)
-        self._request({"op": "subscribe", "name": name, "replay": replay})
+        request: dict[str, Any] = {"op": "subscribe", "name": name, "replay": replay}
+        if batch_ms is not None:
+            request["batch_ms"] = batch_ms
+        self._request(request)
 
     def list_plugins(self) -> list[dict[str, str]]:
         """Plugin types available to start, read fresh from the server's
