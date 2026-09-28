@@ -1,0 +1,11 @@
+{
+  "_comment": "Curated, hand-picked area definitions for scripts/extract_city_roads.py and extract_city_buildings.py --area <id>. Any id NOT listed here is instead resolved dynamically: as a raw 'south,west,north,east' bbox if it parses as four floats, or as a real place name geocoded via Nominatim otherwise (see scripts/city_area.py). This registry only needs entries for areas worth re-running/re-verifying by a short, memorable name.",
+  "areas": {
+    "klosterneuburg_center": {
+      "name": "Central Klosterneuburg, Austria",
+      "bbox": { "south": 48.3050, "west": 16.3270, "north": 48.3065, "east": 16.3300 },
+      "description": "A few real city blocks around central Klosterneuburg, Austria",
+      "default_agent_count": 8
+    }
+  }
+}

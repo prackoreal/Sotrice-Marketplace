@@ -1,0 +1,12 @@
+{
+  "type": "city-roads",
+  "version": "0.1.0",
+  "description": "A real, minimal road-network data source — a few real city blocks around central Klosterneuburg, Austria, extracted from OpenStreetMap (see scripts/extract_city_roads.py in the main Sotrice repo). Publishes the routable node/edge graph as a bare road_network attribute for anything to consume (agent-behavior-test uses it for real pathfinding), plus a real road_attribution string (© OpenStreetMap contributors, ODbL — real attribution is required wherever this data is displayed). Not the photorealistic-building/3D-Tiles problem — no building geometry, just the road network.",
+  "concepts": ["CityRoads"],
+  "depends_on": [],
+  "author": "prackoreal",
+  "entry": "city_roads.py",
+  "handles_extensions": [],
+  "ui_controls": [],
+  "package": "Sotrice City Simulator"
+}

@@ -1,0 +1,12 @@
+{
+  "type": "physics-test",
+  "version": "0.1.0",
+  "description": "Physics spin skeleton — synthetic test scene only (a handful of boxes/spheres falling and colliding), own fixed-timestep loop, uniform-grid broad-phase collision, double-precision coordinates, LOD via a stubbed active_viewpoint. Not real map data — that's a separate, later spin.",
+  "concepts": ["Physics"],
+  "depends_on": [],
+  "author": "prackoreal",
+  "entry": "physics_test.py",
+  "handles_extensions": [],
+  "ui_controls": [],
+  "package": "Sotrice City Simulator"
+}

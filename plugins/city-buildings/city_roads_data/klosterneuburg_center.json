@@ -1,0 +1,1112 @@
+{
+  "attribution": "© OpenStreetMap contributors",
+  "license": "ODbL 1.0 — https://www.openstreetmap.org/copyright",
+  "source": "Overpass API extract",
+  "area_description": "A few real city blocks around central Klosterneuburg, Austria",
+  "bbox": {
+    "south": 48.305,
+    "west": 16.327,
+    "north": 48.3065,
+    "east": 16.33
+  },
+  "origin_lat": 48.305387935714286,
+  "origin_lon": 16.327527307142855,
+  "coordinate_note": "x/z are meters, local-tangent-plane, relative to origin_lat/origin_lon — 1 unit = 1 real meter, matching physics-test's own world scale | recentered: origin moved to the road component nearest the real buildings, not merely the largest by node count (see city_area.recenter_to_building_proximity)",
+  "way_count": 20,
+  "nodes": {
+    "1474153986": {
+      "x": -28.916,
+      "z": 23.24,
+      "lat": 48.3055967,
+      "lon": 16.3271368
+    },
+    "1474153992": {
+      "x": -34.536,
+      "z": 26.914,
+      "lat": 48.3056297,
+      "lon": 16.3270609
+    },
+    "1215906701": {
+      "x": 102.227,
+      "z": -42.428,
+      "lat": 48.3050068,
+      "lon": 16.3289079
+    },
+    "1215906702": {
+      "x": 81.775,
+      "z": -25.396,
+      "lat": 48.3051598,
+      "lon": 16.3286317
+    },
+    "1215906703": {
+      "x": 68.832,
+      "z": -13.462,
+      "lat": 48.305267,
+      "lon": 16.3284569
+    },
+    "1215906704": {
+      "x": 59.628,
+      "z": 1.867,
+      "lat": 48.3054047,
+      "lon": 16.3283326
+    },
+    "4987891985": {
+      "x": 174.74,
+      "z": -42.839,
+      "lat": 48.3050031,
+      "lon": 16.3298872
+    },
+    "4987891986": {
+      "x": 173.148,
+      "z": -39.344,
+      "lat": 48.3050345,
+      "lon": 16.3298657
+    },
+    "7945680403": {
+      "x": 151.956,
+      "z": 13.255,
+      "lat": 48.305507,
+      "lon": 16.3295795
+    },
+    "7945680404": {
+      "x": 165.366,
+      "z": -14.052,
+      "lat": 48.3052617,
+      "lon": 16.3297606
+    },
+    "7945680405": {
+      "x": 157.421,
+      "z": 9.581,
+      "lat": 48.305474,
+      "lon": 16.3296533
+    },
+    "4987891987": {
+      "x": 170.364,
+      "z": -36.294,
+      "lat": 48.3050619,
+      "lon": 16.3298281
+    },
+    "4987891988": {
+      "x": 166.262,
+      "z": -34.368,
+      "lat": 48.3050792,
+      "lon": 16.3297727
+    },
+    "4987891992": {
+      "x": 153.503,
+      "z": -42.539,
+      "lat": 48.3050058,
+      "lon": 16.3296004
+    },
+    "4987891989": {
+      "x": 161.76,
+      "z": -34.234,
+      "lat": 48.3050804,
+      "lon": 16.3297119
+    },
+    "4987891990": {
+      "x": 157.539,
+      "z": -35.815,
+      "lat": 48.3050662,
+      "lon": 16.3296549
+    },
+    "1215906706": {
+      "x": 87.232,
+      "z": -36.984,
+      "lat": 48.3050557,
+      "lon": 16.3287054
+    },
+    "4987891996": {
+      "x": 156.251,
+      "z": -35.492,
+      "lat": 48.3050691,
+      "lon": 16.3296375
+    },
+    "1215906708": {
+      "x": 64.737,
+      "z": -18.583,
+      "lat": 48.305221,
+      "lon": 16.3284016
+    },
+    "1215906709": {
+      "x": 56.222,
+      "z": -5.97,
+      "lat": 48.3053343,
+      "lon": 16.3282866
+    },
+    "1215906710": {
+      "x": 47.699,
+      "z": 14.134,
+      "lat": 48.3055149,
+      "lon": 16.3281715
+    },
+    "10020213792": {
+      "x": 27.033,
+      "z": 12.308,
+      "lat": 48.3054985,
+      "lon": 16.3278924
+    },
+    "1215906711": {
+      "x": 39.184,
+      "z": 36.287,
+      "lat": 48.3057139,
+      "lon": 16.3280565
+    },
+    "1215906713": {
+      "x": 16.348,
+      "z": 95.231,
+      "lat": 48.3062434,
+      "lon": 16.3277481
+    },
+    "1215906714": {
+      "x": 16.348,
+      "z": 99.661,
+      "lat": 48.3062832,
+      "lon": 16.3277481
+    },
+    "9580328347": {
+      "x": 151.319,
+      "z": -18.772,
+      "lat": 48.3052193,
+      "lon": 16.3295709
+    },
+    "9580328345": {
+      "x": 150.564,
+      "z": -12.995,
+      "lat": 48.3052712,
+      "lon": 16.3295607
+    },
+    "1731874732": {
+      "x": 0.103,
+      "z": -35.181,
+      "lat": 48.3050719,
+      "lon": 16.3275287
+    },
+    "1836628912": {
+      "x": 165.232,
+      "z": 53.274,
+      "lat": 48.3058665,
+      "lon": 16.3297588
+    },
+    "1215906712": {
+      "x": 22.146,
+      "z": 84.332,
+      "lat": 48.3061455,
+      "lon": 16.3278264
+    },
+    "12652307787": {
+      "x": 154.177,
+      "z": -40.257,
+      "lat": 48.3050263,
+      "lon": 16.3296095
+    },
+    "12652307788": {
+      "x": 151.312,
+      "z": -39.11,
+      "lat": 48.3050366,
+      "lon": 16.3295708
+    },
+    "12652307789": {
+      "x": 154.747,
+      "z": -38.832,
+      "lat": 48.3050391,
+      "lon": 16.3296172
+    },
+    "8091343": {
+      "x": 115.207,
+      "z": 101.799,
+      "lat": 48.3063024,
+      "lon": 16.3290832
+    },
+    "8091344": {
+      "x": 138.302,
+      "z": 48.977,
+      "lat": 48.3058279,
+      "lon": 16.3293951
+    },
+    "8091345": {
+      "x": 151.526,
+      "z": 19.511,
+      "lat": 48.3055632,
+      "lon": 16.3295737
+    },
+    "5642123733": {
+      "x": 167.698,
+      "z": -27.01,
+      "lat": 48.3051453,
+      "lon": 16.3297921
+    },
+    "1719876606": {
+      "x": 158.613,
+      "z": -23.737,
+      "lat": 48.3051747,
+      "lon": 16.3296694
+    },
+    "2467851608": {
+      "x": 22.472,
+      "z": 23.374,
+      "lat": 48.3055979,
+      "lon": 16.3278308
+    },
+    "11224707421": {
+      "x": 140.064,
+      "z": 110.448,
+      "lat": 48.3063801,
+      "lon": 16.3294189
+    },
+    "2467851615": {
+      "x": 16.763,
+      "z": 33.849,
+      "lat": 48.305692,
+      "lon": 16.3277537
+    },
+    "3177333730": {
+      "x": 174.14,
+      "z": -40.958,
+      "lat": 48.30502,
+      "lon": 16.3298791
+    },
+    "1684503395": {
+      "x": 155.732,
+      "z": -37.173,
+      "lat": 48.305054,
+      "lon": 16.3296305
+    },
+    "1684503396": {
+      "x": 172.23,
+      "z": -38.22,
+      "lat": 48.3050446,
+      "lon": 16.3298533
+    },
+    "1684503397": {
+      "x": 168.409,
+      "z": -35.08,
+      "lat": 48.3050728,
+      "lon": 16.3298017
+    },
+    "1684503398": {
+      "x": 159.568,
+      "z": -34.813,
+      "lat": 48.3050752,
+      "lon": 16.3296823
+    },
+    "1684503399": {
+      "x": 164.018,
+      "z": -34.079,
+      "lat": 48.3050818,
+      "lon": 16.3297424
+    },
+    "1719876585": {
+      "x": 163.166,
+      "z": -5.057,
+      "lat": 48.3053425,
+      "lon": 16.3297309
+    },
+    "1719876587": {
+      "x": 147.765,
+      "z": 27.559,
+      "lat": 48.3056355,
+      "lon": 16.3295229
+    },
+    "5238025840": {
+      "x": 62.175,
+      "z": -2.375,
+      "lat": 48.3053666,
+      "lon": 16.328367
+    },
+    "9580275952": {
+      "x": 17.563,
+      "z": -0.493,
+      "lat": 48.3053835,
+      "lon": 16.3277645
+    },
+    "9580275953": {
+      "x": 6.456,
+      "z": 3.759,
+      "lat": 48.3054217,
+      "lon": 16.3276145
+    },
+    "1731874672": {
+      "x": 27.766,
+      "z": -42.294,
+      "lat": 48.305008,
+      "lon": 16.3279023
+    },
+    "1215906705": {
+      "x": 54.415,
+      "z": 15.169,
+      "lat": 48.3055242,
+      "lon": 16.3282622
+    },
+    "1474153972": {
+      "x": -6.243,
+      "z": 2.835,
+      "lat": 48.3054134,
+      "lon": 16.327443
+    },
+    "9377082230": {
+      "x": 166.928,
+      "z": -22.713,
+      "lat": 48.3051839,
+      "lon": 16.3297817
+    },
+    "1719876596": {
+      "x": 157.206,
+      "z": -31.474,
+      "lat": 48.3051052,
+      "lon": 16.3296504
+    },
+    "1474153976": {
+      "x": 23.175,
+      "z": 2.379,
+      "lat": 48.3054093,
+      "lon": 16.3278403
+    },
+    "1719876603": {
+      "x": 158.398,
+      "z": -10.69,
+      "lat": 48.3052919,
+      "lon": 16.3296665
+    },
+    "1215906707": {
+      "x": 74.282,
+      "z": -28.457,
+      "lat": 48.3051323,
+      "lon": 16.3285305
+    },
+    "299977085": {
+      "x": -17.935,
+      "z": -38.643,
+      "lat": 48.3050408,
+      "lon": 16.3272851
+    },
+    "299977086": {
+      "x": -16.454,
+      "z": -28.446,
+      "lat": 48.3051324,
+      "lon": 16.3273051
+    },
+    "1474153983": {
+      "x": -37.253,
+      "z": 16.405,
+      "lat": 48.3055353,
+      "lon": 16.3270242
+    }
+  },
+  "edges": [
+    {
+      "from": "1836628912",
+      "to": "11224707421",
+      "length_m": 62.4,
+      "name": "Umfahrung Klosterneuburg",
+      "highway": "primary"
+    },
+    {
+      "from": "11224707421",
+      "to": "1836628912",
+      "length_m": 62.4,
+      "name": "Umfahrung Klosterneuburg",
+      "highway": "primary"
+    },
+    {
+      "from": "299977085",
+      "to": "299977086",
+      "length_m": 10.29,
+      "name": "Heisslergasse",
+      "highway": "residential"
+    },
+    {
+      "from": "1215906701",
+      "to": "1215906706",
+      "length_m": 15.93,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906706",
+      "to": "1215906701",
+      "length_m": 15.93,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906706",
+      "to": "1215906707",
+      "length_m": 15.49,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906707",
+      "to": "1215906706",
+      "length_m": 15.49,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906707",
+      "to": "1215906708",
+      "length_m": 13.72,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906708",
+      "to": "1215906707",
+      "length_m": 13.72,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906708",
+      "to": "1215906709",
+      "length_m": 15.2,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906709",
+      "to": "1215906708",
+      "length_m": 15.2,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906709",
+      "to": "1215906710",
+      "length_m": 21.81,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906710",
+      "to": "1215906709",
+      "length_m": 21.81,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906710",
+      "to": "1215906711",
+      "length_m": 23.71,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906711",
+      "to": "1215906710",
+      "length_m": 23.71,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906711",
+      "to": "1215906712",
+      "length_m": 50.92,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906712",
+      "to": "1215906711",
+      "length_m": 50.92,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906712",
+      "to": "1215906713",
+      "length_m": 12.33,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906713",
+      "to": "1215906712",
+      "length_m": 12.33,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906713",
+      "to": "1215906714",
+      "length_m": 4.43,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906714",
+      "to": "1215906713",
+      "length_m": 4.43,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1474153992",
+      "to": "1474153986",
+      "length_m": 6.71,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1474153986",
+      "to": "1474153992",
+      "length_m": 6.71,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1474153986",
+      "to": "1474153972",
+      "length_m": 30.47,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1474153972",
+      "to": "1474153986",
+      "length_m": 30.47,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1474153972",
+      "to": "9580275953",
+      "length_m": 12.72,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "9580275953",
+      "to": "1474153972",
+      "length_m": 12.72,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "9580275953",
+      "to": "9580275952",
+      "length_m": 11.88,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "9580275952",
+      "to": "9580275953",
+      "length_m": 11.88,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "9580275952",
+      "to": "1474153976",
+      "length_m": 6.3,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1474153976",
+      "to": "9580275952",
+      "length_m": 6.3,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1474153976",
+      "to": "10020213792",
+      "length_m": 10.64,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "10020213792",
+      "to": "1474153976",
+      "length_m": 10.64,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "10020213792",
+      "to": "2467851608",
+      "length_m": 11.95,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "2467851608",
+      "to": "10020213792",
+      "length_m": 11.95,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1684503396",
+      "to": "4987891987",
+      "length_m": 2.68,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "4987891987",
+      "to": "1684503396",
+      "length_m": 2.68,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "4987891987",
+      "to": "1684503397",
+      "length_m": 2.3,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "1684503397",
+      "to": "4987891987",
+      "length_m": 2.3,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "1684503397",
+      "to": "4987891988",
+      "length_m": 2.26,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "4987891988",
+      "to": "1684503397",
+      "length_m": 2.26,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "4987891988",
+      "to": "1684503399",
+      "length_m": 2.26,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "1684503399",
+      "to": "4987891988",
+      "length_m": 2.26,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "1684503399",
+      "to": "4987891989",
+      "length_m": 2.26,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "4987891989",
+      "to": "1684503399",
+      "length_m": 2.26,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "4987891989",
+      "to": "1684503398",
+      "length_m": 2.26,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "1684503398",
+      "to": "4987891989",
+      "length_m": 2.26,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "1684503398",
+      "to": "4987891990",
+      "length_m": 2.26,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "4987891990",
+      "to": "1684503398",
+      "length_m": 2.26,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "4987891990",
+      "to": "1684503395",
+      "length_m": 2.26,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "1684503395",
+      "to": "4987891990",
+      "length_m": 2.26,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "8091345",
+      "to": "7945680403",
+      "length_m": 6.26,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "7945680403",
+      "to": "1719876603",
+      "length_m": 24.77,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "1719876603",
+      "to": "1719876606",
+      "length_m": 13.03,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "1719876606",
+      "to": "1719876596",
+      "length_m": 7.85,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "1719876596",
+      "to": "4987891996",
+      "length_m": 4.13,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "4987891996",
+      "to": "1684503395",
+      "length_m": 1.76,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "9377082230",
+      "to": "7945680404",
+      "length_m": 8.79,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "7945680404",
+      "to": "1719876585",
+      "length_m": 9.25,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "1719876585",
+      "to": "7945680405",
+      "length_m": 15.71,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "7945680405",
+      "to": "8091345",
+      "length_m": 11.53,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "12652307789",
+      "to": "12652307788",
+      "length_m": 3.44,
+      "name": "Pater-Abel-Straße",
+      "highway": "residential"
+    },
+    {
+      "from": "299977086",
+      "to": "1731874732",
+      "length_m": 17.85,
+      "name": "Schiefergarten",
+      "highway": "residential"
+    },
+    {
+      "from": "1731874732",
+      "to": "299977086",
+      "length_m": 17.85,
+      "name": "Schiefergarten",
+      "highway": "residential"
+    },
+    {
+      "from": "1731874732",
+      "to": "1731874672",
+      "length_m": 28.53,
+      "name": "Schiefergarten",
+      "highway": "residential"
+    },
+    {
+      "from": "1731874672",
+      "to": "1731874732",
+      "length_m": 28.53,
+      "name": "Schiefergarten",
+      "highway": "residential"
+    },
+    {
+      "from": "299977086",
+      "to": "1474153983",
+      "length_m": 49.38,
+      "name": "Schiefergarten",
+      "highway": "residential"
+    },
+    {
+      "from": "1474153983",
+      "to": "1474153992",
+      "length_m": 10.84,
+      "name": "Schiefergarten",
+      "highway": "residential"
+    },
+    {
+      "from": "2467851615",
+      "to": "2467851608",
+      "length_m": 11.92,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "2467851608",
+      "to": "2467851615",
+      "length_m": 11.92,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "4987891985",
+      "to": "3177333730",
+      "length_m": 1.97,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "3177333730",
+      "to": "4987891985",
+      "length_m": 1.97,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "3177333730",
+      "to": "4987891986",
+      "length_m": 1.89,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "4987891986",
+      "to": "3177333730",
+      "length_m": 1.89,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "4987891986",
+      "to": "1684503396",
+      "length_m": 1.45,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "1684503396",
+      "to": "4987891986",
+      "length_m": 1.45,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "12652307789",
+      "to": "12652307787",
+      "length_m": 1.53,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "12652307787",
+      "to": "12652307789",
+      "length_m": 1.53,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "12652307787",
+      "to": "4987891992",
+      "length_m": 2.38,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "4987891992",
+      "to": "12652307787",
+      "length_m": 2.38,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "5238025840",
+      "to": "1215906704",
+      "length_m": 4.94,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906704",
+      "to": "5238025840",
+      "length_m": 4.94,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906704",
+      "to": "1215906705",
+      "length_m": 14.27,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906705",
+      "to": "1215906704",
+      "length_m": 14.27,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906701",
+      "to": "1215906702",
+      "length_m": 26.58,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906702",
+      "to": "1215906701",
+      "length_m": 26.58,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906702",
+      "to": "1215906703",
+      "length_m": 17.59,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906703",
+      "to": "1215906702",
+      "length_m": 17.59,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1215906703",
+      "to": "5238025840",
+      "length_m": 12.92,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "5238025840",
+      "to": "1215906703",
+      "length_m": 12.92,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "8091343",
+      "to": "8091344",
+      "length_m": 57.58,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "8091344",
+      "to": "8091343",
+      "length_m": 57.58,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "8091344",
+      "to": "1719876587",
+      "length_m": 23.39,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "1719876587",
+      "to": "8091344",
+      "length_m": 23.39,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "1719876587",
+      "to": "8091345",
+      "length_m": 8.87,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "8091345",
+      "to": "1719876587",
+      "length_m": 8.87,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "1684503396",
+      "to": "5642123733",
+      "length_m": 12.08,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "5642123733",
+      "to": "9377082230",
+      "length_m": 4.36,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "9580328345",
+      "to": "9580328347",
+      "length_m": 5.82,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "9580328347",
+      "to": "9580328345",
+      "length_m": 5.82,
+      "name": null,
+      "highway": "service"
+    },
+    {
+      "from": "1684503395",
+      "to": "12652307789",
+      "length_m": 1.93,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    },
+    {
+      "from": "12652307789",
+      "to": "1684503395",
+      "length_m": 1.93,
+      "name": "Wiener Straße",
+      "highway": "tertiary"
+    }
+  ]
+}

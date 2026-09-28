@@ -1,0 +1,12 @@
+{
+  "type": "agent-behavior-test",
+  "version": "0.2.0",
+  "description": "Agent-behavior spin skeleton — the next layer on top of physics-test's synthetic scene. Watches physics-test's published position/physics_lod_tier per entity (no enumeration, pure subscribe-by-name). If city-roads' real OSM road network is available, pathfinds (Dijkstra) to a real destination and walks the actual route; otherwise falls back to picking a random nearby point. Publishes desired_target, which physics-test's own steering (if running) consumes — this file has no idea whether anything is actually listening.",
+  "concepts": ["AgentBehavior"],
+  "depends_on": ["Physics"],
+  "author": "prackoreal",
+  "entry": "agent_behavior_test.py",
+  "handles_extensions": [],
+  "ui_controls": [],
+  "package": "Sotrice City Simulator"
+}

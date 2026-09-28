@@ -1,0 +1,18 @@
+{
+  "type": "rendering-test",
+  "version": "0.1.0",
+  "description": "Rendering spin — first vertical slice only: a real three.js spin-ui:// viewer for physics-test's synthetic scene (subscribes to position/orientation/physics_lod_tier/shape/radius/half_extents, no enumeration, pure subscribe-by-name), with one real adaptive-fidelity mechanism (full geometry for 'full' LOD tier bodies, cheap impostors for 'kinematic' tier bodies) and its own settings panel (quality preset, DXGI-enumerated compute device choice, remote-compute stub, city area picker, Cesium ion token). Also draws city-roads/city-buildings' real OpenStreetMap Klosterneuburg extract (real road lines, basic extruded building footprints) plus agent-behavior-test's own moving walker/vehicle markers, and, in a separate Photorealistic mode, real Google Photorealistic 3D Tiles for the same real Klosterneuburg area via CesiumJS + a user's own Cesium ion token. Every building, agent, and physics body in the scene is click-selectable (a real raycast against each one's own mesh) and opens a generic property-inspector panel listing EVERY real Core attribute that entity currently has, editable in place — including economics-test's real derived data (building_traffic_visits_count, building_nearest_road_name, building_road_distance_m) once that plugin is running. Not the eventual GTA6-style adaptive renderer — no ray tracing, no temporal denoising.",
+  "concepts": ["Rendering"],
+  "depends_on": ["Physics", "CityRoads", "CityBuildings"],
+  "author": "prackoreal",
+  "entry": "rendering_test.py",
+  "handles_extensions": [],
+  "ui_controls": [],
+  "package": "Sotrice City Simulator",
+  "ui": {
+    "entry": "rendering-test-ui/dist/index.html",
+    "modes": ["widget", "fullview"],
+    "connect_src": ["https://api.cesium.com", "https://*.cesium.com", "https://*.googleapis.com", "https://tile.googleapis.com"],
+    "joinable": false
+  }
+}
