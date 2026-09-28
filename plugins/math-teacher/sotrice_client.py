@@ -487,6 +487,17 @@ class World:
         plugins/registry.json — each a {"type": ..., "description": ...}."""
         return self._request({"op": "list_plugins"})["plugins"]
 
+    def list_running(self) -> list[dict[str, Any]]:
+        """Every currently-running instance of ANY plugin type — each a
+        {"launch_id": ..., "plugin_type": ..., "disabled": ...}. Check
+        this BEFORE calling start_plugin for a plugin type your own code
+        depends on but doesn't own (e.g. a companion process another
+        plugin might already have started) — start_plugin itself has no
+        dedup (a type like graphing legitimately supports several
+        concurrent instances), so skipping this check risks spawning a
+        redundant second instance of something already running."""
+        return self._request({"op": "list_running"})["running"]
+
     def start_plugin(self, plugin_type: str) -> str:
         """Starts a new instance of a registered plugin type as a real OS
         process and returns a launch id for stopping it later. This is

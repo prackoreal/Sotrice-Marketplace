@@ -3,7 +3,7 @@
   "plugins": [
     {
       "type": "math-teacher",
-      "version": "0.4.3",
+      "version": "0.4.4",
       "description": "Runs a math class: a real question-authoring UI (multiple choice, free response, multi-select, matching-pair with distractors), adaptive per-student difficulty (off by default; teacher-toggleable automatic/manual, asymmetric -- 3-in-a-row correct to move up a tier, 2-in-a-row wrong to move down), a correctness streak and opt-in scoreboard per student, live mid-session editing via a teacher_command control attribute, a per-class identity (class_code/class_name) so more than one class can run on the same machine without their data mixing, and persistence -- a class's identity, roster, and question bank survive the process exiting, and can be resumed later. Install math-student alongside it, or have a real student join by code from their own device, to see the tally move.",
       "concepts": [
         "MathClass"
@@ -38,7 +38,7 @@
     },
     {
       "type": "lama-bank",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "A headless companion plugin for math-teacher, same relationship city-weather has to city-layout: watches a folder of real LaMa (CC BY 3.0) worksheet PDFs, parses them into a browsable catalog of ready-to-use questions (metadata only -- titel/Grundkompetenz/Klasse/Quelle/Aufgabenformat -- never the full question content until it's actually filed into a class), and files a chosen subset into a live math-teacher class's own bank through the exact same authoring_command import channel a human-driven import already uses. Not a UI of any kind -- install it alongside math-teacher and drive it from math-teacher's own LaMa upload panel.",
       "concepts": [
         "LaMaBank"
