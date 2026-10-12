@@ -333,6 +333,14 @@ Entities published:
       chapter mutation (see publish_authoring_state). Loopback-only via
       the "authoring_" prefix rule (see "Authoring" above) — never
       readable from a joined student's connection no matter what.
+    authoring_import_result ({"imported_count", "skipped_count",
+      "skipped_reasons": [str, ...]}) — published every time
+      "import_questions" runs (see authoring_command below), success or
+      not, so a batch that fails entirely (e.g. every item fails
+      validate_question_content) is never indistinguishable from "the
+      import silently did nothing" — a real bug this used to have.
+      "skipped_reasons" is capped at MAX_IMPORT_PER_REQUEST entries, one
+      human-readable reason per skipped item.
 
 Reads (subscribing to a class_attr()-scoped name, not a specific entity —
 any number of math_student instances for THIS class can exist):
@@ -1736,30 +1744,44 @@ with World() as world:
         leave_locked = value
 
     def validate_question_content(value: dict) -> dict | None:
+        """Thin wrapper around _validate_question_content_reason below,
+        for the 3 callers (teacher_command's "replace" and
+        authoring_command's add_question/edit_question) that only ever
+        cared about success/failure, not why — import_questions is the
+        one caller that needs the reason too (see its own doc comment on
+        why silently dropping an import item with zero visible error is
+        its own bug), so it calls the reason-returning function
+        directly instead."""
+        content, _reason = _validate_question_content_reason(value)
+        return content
+
+    def _validate_question_content_reason(value: dict) -> tuple[dict | None, str | None]:
         """Shared shape/bound validation for a question's CONTENT
         fields — everything except "id" and "tier" — used by
         teacher_command's "replace" and authoring_command's
         add_question/edit_question/import_questions below, so the exact
         same rules apply no matter which way a question's content
-        arrives. Returns {"type", "text", "hint", "points", "options",
+        arrives. Returns ({"type", "text", "hint", "points", "options",
         "correct_index", "accepted_answers", "correct_indices", "pairs",
-        "distractors"} (every key always present, None for whichever the type doesn't
-        use — see the module docstring's "Question shape" section) or
-        None if anything at all is invalid — every caller's response to
-        None is the same "silently drop the whole command" every other
+        "distractors"} (every key always present, None for whichever the
+        type doesn't use — see the module docstring's "Question shape"
+        section), None) on success, or (None, "<human-readable reason>")
+        if anything at all is invalid — every caller besides
+        import_questions ignores the reason and treats None content as
+        the same "silently drop the whole command" every other
         malformed input here already gets."""
         type_ = value.get("type", "multiple_choice")
         if type_ not in QUESTION_TYPES:
-            return None
+            return None, f"unknown question type {type_!r}"
         text = value.get("text")
         if not isinstance(text, str) or not text.strip() or len(text) > MAX_TEXT_LENGTH:
-            return None
+            return None, "missing/empty/too-long \"text\""
         hint = value.get("hint")
         if hint is not None and (not isinstance(hint, str) or len(hint) > MAX_HINT_LENGTH):
-            return None
+            return None, "\"hint\" is too long"
         points = value.get("points", DEFAULT_POINTS)
         if isinstance(points, bool) or not isinstance(points, int) or not (1 <= points <= MAX_POINTS):
-            return None
+            return None, f"\"points\" must be an int between 1 and {MAX_POINTS}"
 
         base = {
             "type": type_, "text": text, "hint": hint, "points": points,
@@ -1771,16 +1793,16 @@ with World() as world:
             options = value.get("options")
             correct_index = value.get("correct_index")
             if not isinstance(options, list) or not (0 < len(options) <= MAX_OPTIONS):
-                return None
+                return None, f"\"options\" must be a non-empty list of at most {MAX_OPTIONS}"
             if not all(isinstance(opt, str) and 0 < len(opt) <= MAX_OPTION_LENGTH for opt in options):
-                return None
+                return None, "every option must be a non-empty string within the length limit"
             if correct_index is not None and (
                 isinstance(correct_index, bool)
                 or not isinstance(correct_index, int)
                 or not (0 <= correct_index < len(options))
             ):
-                return None  # a nonsensical correct_index is treated as "don't grade this", not silently clamped
-            return {**base, "options": list(options), "correct_index": correct_index}
+                return None, "\"correct_index\" is out of range for \"options\""  # a nonsensical correct_index is treated as "don't grade this", not silently clamped
+            return {**base, "options": list(options), "correct_index": correct_index}, None
 
         if type_ == "free_response":
             accepted_answers = value.get("accepted_answers")
@@ -1789,26 +1811,26 @@ with World() as world:
                 and 0 < len(accepted_answers) <= MAX_ACCEPTED_ANSWERS
                 and all(isinstance(a, str) and 0 < len(a) <= MAX_ACCEPTED_ANSWER_LENGTH for a in accepted_answers)
             ):
-                return None
-            return {**base, "accepted_answers": accepted_answers}
+                return None, "\"accepted_answers\" must be a non-empty list of short strings"
+            return {**base, "accepted_answers": accepted_answers}, None
 
         if type_ == "multi_select":
             options = value.get("options")
             correct_indices = value.get("correct_indices")
             if not isinstance(options, list) or not (0 < len(options) <= MAX_OPTIONS):
-                return None
+                return None, f"\"options\" must be a non-empty list of at most {MAX_OPTIONS}"
             if not all(isinstance(opt, str) and 0 < len(opt) <= MAX_OPTION_LENGTH for opt in options):
-                return None
+                return None, "every option must be a non-empty string within the length limit"
             if correct_indices is not None:
                 if not isinstance(correct_indices, list) or not correct_indices:
-                    return None  # an explicit-but-empty correct set makes no sense — same "don't pretend to grade" refusal as a nonsensical correct_index
+                    return None, "\"correct_indices\" must be null or a non-empty list"  # an explicit-but-empty correct set makes no sense — same "don't pretend to grade" refusal as a nonsensical correct_index
                 cleaned_indices: set[int] = set()
                 for i in correct_indices:
                     if isinstance(i, bool) or not isinstance(i, int) or not (0 <= i < len(options)):
-                        return None
+                        return None, "\"correct_indices\" contains an index out of range for \"options\""
                     cleaned_indices.add(i)
                 correct_indices = sorted(cleaned_indices)
-            return {**base, "options": list(options), "correct_indices": correct_indices}
+            return {**base, "options": list(options), "correct_indices": correct_indices}, None
 
         # matching_pair — always gradable (no "leave it ungraded" option,
         # see the module docstring), so "pairs" is required here, unlike
@@ -1817,25 +1839,25 @@ with World() as world:
         # any left item (see the module docstring's "Question shape").
         pairs = value.get("pairs")
         if not isinstance(pairs, list) or not (MIN_PAIRS <= len(pairs) <= MAX_PAIRS):
-            return None
+            return None, f"\"pairs\" must have between {MIN_PAIRS} and {MAX_PAIRS} entries"
         cleaned_pairs: list[dict] = []
         for pair in pairs:
             if not isinstance(pair, dict):
-                return None
+                return None, "every \"pairs\" entry must be an object"
             left, right = pair.get("left"), pair.get("right")
             if not isinstance(left, str) or not (0 < len(left) <= MAX_OPTION_LENGTH):
-                return None
+                return None, "every pair's \"left\" must be a non-empty string within the length limit"
             if not isinstance(right, str) or not (0 < len(right) <= MAX_OPTION_LENGTH):
-                return None
+                return None, "every pair's \"right\" must be a non-empty string within the length limit"
             cleaned_pairs.append({"left": left, "right": right})
         distractors = value.get("distractors")
         if distractors is not None:
             if not isinstance(distractors, list) or len(distractors) > MAX_DISTRACTORS:
-                return None
+                return None, f"\"distractors\" must be a list of at most {MAX_DISTRACTORS}"
             if not all(isinstance(d, str) and 0 < len(d) <= MAX_OPTION_LENGTH for d in distractors):
-                return None
+                return None, "every distractor must be a non-empty string within the length limit"
             distractors = list(distractors)
-        return {**base, "pairs": cleaned_pairs, "distractors": distractors}
+        return {**base, "pairs": cleaned_pairs, "distractors": distractors}, None
 
     def on_teacher_command(entity, attribute, value, source):
         # Same untrusted-input posture as on_answer above: stands in
@@ -1945,7 +1967,11 @@ with World() as world:
             batch — a real import's whole point is tolerating a few
             malformed entries in an otherwise-good batch, unlike every
             other cmd here which drops the WHOLE command on any
-            mismatch. Capped at MAX_IMPORT_PER_REQUEST items and by
+            mismatch. Every skipped item's reason is published via
+            authoring_import_result (see "Entities published" above) —
+            tolerating bad items in the batch must never mean the
+            caller can't tell WHICH ones, or that they failed at all.
+            Capped at MAX_IMPORT_PER_REQUEST items and by
             whatever room is left under MAX_QUESTIONS_PER_CLASS.
             Optionally files every successfully-imported question into
             ONE chapter — an existing one ("chapter_id") or a freshly
@@ -2058,22 +2084,42 @@ with World() as world:
                 return
             room = MAX_QUESTIONS_PER_CLASS - len(class_question_bank)
             if room <= 0:
+                world.set_attribute(control, class_attr("authoring_import_result"), {
+                    "imported_count": 0, "skipped_count": len(items), "skipped_reasons": ["class question bank is already full"],
+                })
                 return
 
+            # Unlike validate_question_content's other 3 callers, a
+            # failed item here must stay VISIBLE to whoever triggered
+            # the import (e.g. a LaMa batch) instead of just vanishing —
+            # see authoring_import_result below, published every time
+            # this command runs (success or not) so an all-failed batch
+            # is never silently indistinguishable from "nothing to do".
             imported: list[dict] = []
-            for item in items[:MAX_IMPORT_PER_REQUEST]:
+            skipped_reasons: list[str] = []
+            batch = items[:MAX_IMPORT_PER_REQUEST]
+            for item in batch:
                 if len(imported) >= room:
-                    break
-                if not isinstance(item, dict):
+                    skipped_reasons.append("class question bank cap reached partway through this batch")
                     continue
+                if not isinstance(item, dict):
+                    skipped_reasons.append("not a question object")
+                    continue
+                label = item.get("text") if isinstance(item.get("text"), str) else "untitled question"
                 tier = item.get("tier", DEFAULT_TIER)
                 if tier not in TIERS:
+                    skipped_reasons.append(f"{label!r}: invalid tier {tier!r}")
                     continue
-                content = validate_question_content(item)
+                content, reason = _validate_question_content_reason(item)
                 if content is None:
+                    skipped_reasons.append(f"{label!r}: {reason}")
                     continue
                 imported.append({"id": new_question_id(), "tier": tier, **content})
 
+            world.set_attribute(control, class_attr("authoring_import_result"), {
+                "imported_count": len(imported), "skipped_count": len(batch) - len(imported),
+                "skipped_reasons": skipped_reasons[:MAX_IMPORT_PER_REQUEST],
+            })
             if not imported:
                 return  # nothing in the batch was actually usable
             class_question_bank.extend(imported)

@@ -3,7 +3,7 @@
   "plugins": [
     {
       "type": "math-teacher",
-      "version": "0.4.6",
+      "version": "0.4.7",
       "description": "Runs a math class: a real question-authoring UI (multiple choice, free response, multi-select, matching-pair with distractors), adaptive per-student difficulty (off by default; teacher-toggleable automatic/manual, asymmetric -- 3-in-a-row correct to move up a tier, 2-in-a-row wrong to move down), a correctness streak and opt-in scoreboard per student, live mid-session editing via a teacher_command control attribute, a per-class identity (class_code/class_name) so more than one class can run on the same machine without their data mixing, and persistence -- a class's identity, roster, and question bank survive the process exiting, and can be resumed later. Install math-student alongside it, or have a real student join by code from their own device, to see the tally move.",
       "concepts": [
         "MathClass"
@@ -38,7 +38,7 @@
     },
     {
       "type": "lama-bank",
-      "version": "0.1.3",
+      "version": "0.1.4",
       "description": "A headless companion plugin for math-teacher, same relationship city-weather has to city-layout: watches a folder of real LaMa (CC BY 3.0) worksheet PDFs, parses them into a browsable catalog of ready-to-use questions (metadata only -- titel/Grundkompetenz/Klasse/Quelle/Aufgabenformat -- never the full question content until it's actually filed into a class), and files a chosen subset into a live math-teacher class's own bank through the exact same authoring_command import channel a human-driven import already uses. Not a UI of any kind -- install it alongside math-teacher and drive it from math-teacher's own LaMa upload panel.",
       "concepts": [
         "LaMaBank"
@@ -48,6 +48,17 @@
       ],
       "author": "prackoreal",
       "file": "lama-bank.spin"
+    },
+    {
+      "type": "ai-test",
+      "version": "0.1.0",
+      "description": "Universal AI spin — one domain-agnostic request/response mechanism shared by the math spin's AI tab and, later, a city spin's own analyst UI, per the same 'one shared engine, two presentations' design already used for compute plugins elsewhere. Watches any entity's ai_request attribute (prompt + optional context payload + optional request_id/task_hint, no enumeration, pure subscribe-by-name) and calls the real Gemini API (gemini-3.8-flash capable / gemini-3.1-flash-lite budget, automatic per-request selection), writing an ai_response attribute back onto that same entity. Has no idea which spin, if any, is asking. Ships its own Settings UI (ai-test-ui) for the real per-user Gemini API key and cost/quality bias, falling back to a dev-only local-secrets key when neither has ever been set.",
+      "concepts": [
+        "UniversalAI"
+      ],
+      "depends_on": [],
+      "author": "prackoreal",
+      "file": "ai-test.spin"
     },
     {
       "type": "physics-test",
@@ -62,7 +73,7 @@
     },
     {
       "type": "agent-behavior-test",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "description": "Agent-behavior spin skeleton -- the next layer on top of physics-test's synthetic scene. Watches physics-test's published position/physics_lod_tier per entity (no enumeration, pure subscribe-by-name). If city-roads' real OSM road network is available, pathfinds (Dijkstra) to a real destination and walks the actual route; otherwise falls back to picking a random nearby point. Publishes desired_target, which physics-test's own steering (if running) consumes -- this file has no idea whether anything is actually listening.",
       "concepts": [
         "AgentBehavior"
@@ -86,7 +97,7 @@
     },
     {
       "type": "city-buildings",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "A real, minimal building-footprint data source -- the same small Klosterneuburg area city-roads covers, aligned to the same coordinate origin. Publishes one entity per real OSM building (footprint polygon, ground position, height -- real where tagged, a documented estimate where not) plus a real building_attribution string. Keyless, free, ODbL OSM data only -- NOT the photorealistic Google 3D Tiles/Cesium ingestion, which needs a real external account/API key decision.",
       "concepts": [
         "CityBuildings"
@@ -111,7 +122,7 @@
     },
     {
       "type": "rendering-test",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "Rendering spin -- first vertical slice only: a real three.js spin-ui:// viewer for physics-test's synthetic scene (subscribes to position/orientation/physics_lod_tier/shape/radius/half_extents, no enumeration, pure subscribe-by-name), with one real adaptive-fidelity mechanism (full geometry for 'full' LOD tier bodies, cheap impostors for 'kinematic' tier bodies) and its own settings panel (quality preset, DXGI-enumerated compute device choice, remote-compute stub, city area picker, Cesium ion token). Also draws city-roads/city-buildings' real OpenStreetMap Klosterneuburg extract (real road lines, basic extruded building footprints) plus agent-behavior-test's own moving walker/vehicle markers, and, in a separate Photorealistic mode, real Google Photorealistic 3D Tiles for the same real Klosterneuburg area via CesiumJS + a user's own Cesium ion token. Every building, agent, and physics body in the scene is click-selectable (a real raycast against each one's own mesh) and opens a generic property-inspector panel listing EVERY real Core attribute that entity currently has, editable in place -- including economics-test's real derived data (building_traffic_visits_count, building_nearest_road_name, building_road_distance_m) once that plugin is running. Not the eventual GTA6-style adaptive renderer -- no ray tracing, no temporal denoising.",
       "concepts": [
         "Rendering"

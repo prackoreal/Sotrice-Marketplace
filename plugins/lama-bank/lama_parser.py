@@ -380,17 +380,16 @@ def _parse_matching_pair(ex: RawExercise) -> tuple[Optional[tuple[list[dict], li
     return (pairs, distractors), reason
 
 
-def _parse_multi_select(ex: RawExercise) -> tuple[Optional[list[str]], str]:
-    """Splits a "Mutiple Choice" exercise's content into an intro
-    sentence (discarded — the question TEXT itself is Titel, same as
-    every other type here) and a list of option terms, one per visually
-    separated block. No correct-answer marking is recoverable for this
-    Aufgabenformat AT ALL (see this module's own docstring) — this
-    function only ever returns option TEXT, never a correct_indices
-    guess."""
+def _multi_select_blocks(ex: RawExercise) -> Optional[tuple[list[str], int]]:
+    """Shared block-splitting used by both _parse_multi_select (the
+    options) and _question_text (the discarded intro sentence) — one
+    visually separated block per option, with the instruction sentence
+    possibly wrapping across more than one of them. Returns
+    (block_texts, intro_len), or None if there's no usable block
+    structure at all (fewer than an intro + 2 options)."""
     rows = _cluster_rows(ex.words, gap=6.0)
     if not rows:
-        return None, "no content rows found"
+        return None
     # Group rows into blocks separated by a bigger vertical gap — that
     # gap is what visually distinguishes one option from the next (a
     # single option's own stacked fraction/exponent still uses the
@@ -403,7 +402,7 @@ def _parse_multi_select(ex: RawExercise) -> tuple[Optional[list[str]], str]:
         else:
             blocks[-1].append(row)
     if len(blocks) < 3:  # intro sentence + at least 2 options
-        return None, "fewer than 2 option blocks found"
+        return None
     # The instruction sentence ("Kreuze die beiden Terme an, die...")
     # sometimes wraps across MORE than one visually-separated block —
     # taking only blocks[0] as "the intro" then leaked its own later
@@ -420,10 +419,68 @@ def _parse_multi_select(ex: RawExercise) -> tuple[Optional[list[str]], str]:
         if text.endswith(("!", "?", ".")):
             intro_len = idx + 1
             break
+    return block_texts, intro_len
+
+
+def _parse_multi_select(ex: RawExercise) -> tuple[Optional[list[str]], str]:
+    """Splits a "Mutiple Choice" exercise's content into an intro
+    sentence (see _question_text — used as the imported question's real
+    text, not discarded) and a list of option terms, one per visually
+    separated block. No correct-answer marking is recoverable for this
+    Aufgabenformat AT ALL (see this module's own docstring) — this
+    function only ever returns option TEXT, never a correct_indices
+    guess."""
+    split = _multi_select_blocks(ex)
+    if split is None:
+        return None, "fewer than 2 option blocks found"
+    block_texts, intro_len = split
     options = [o for o in block_texts[intro_len:] if o]
     if len(options) < 2:
         return None, "fewer than 2 non-empty options after the intro sentence"
     return options, "no correct answer is recoverable from a LaMA Mutiple Choice export — imported ungraded, tick the correct option(s) before use"
+
+
+def _question_text(ex: RawExercise, fmt: str) -> str:
+    """The exercise's own problem statement, used as the imported
+    question's "text" field — Titel (ex.meta's "Titel" field) is only a
+    short catalog label (e.g. "Potenzgesetze 3"), never the actual
+    question being asked, so using it as "text" made every imported
+    question unreadable regardless of type. Independent of however the
+    answer/options themselves were extracted (geometry or AI fallback)
+    — this only ever needs the INTRO part of the exercise, a strictly
+    easier job than finding the final answer or every option. Falls
+    back to the full exercise text (never to Titel) if the type-specific
+    intro heuristic below doesn't apply cleanly, so a messy PDF still
+    gets SOME real question text rather than none."""
+    rows = _cluster_rows(ex.words, gap=6.0)
+    if not rows:
+        return ""
+    if fmt == "Mutiple Choice":
+        split = _multi_select_blocks(ex)
+        if split is not None:
+            block_texts, intro_len = split
+            intro = " ".join(block_texts[:intro_len]).strip()
+            if intro:
+                return intro
+        return " ".join(_row_text(r) for r in rows).strip()
+    if fmt == "Zuordnungsformat":
+        out = []
+        for row in rows:
+            if any(_SINGLE_LETTER_RE.match(w.text) for w in row):
+                break
+            out.append(_row_text(row))
+        intro = " ".join(t for t in out if t).strip()
+        return intro or " ".join(_row_text(r) for r in rows).strip()
+    # Offenes Antwortformat — everything except the row(s) holding the
+    # final answer (LaMA's own red-colored solution text, or — when no
+    # color signal is present — the last content row, mirroring
+    # _parse_free_response's own two-tier answer heuristic exactly, so
+    # the text excluded here always matches what actually became the
+    # "accepted_answers" entry instead of guessing independently).
+    red_row_idx = {i for i, row in enumerate(rows) if any(w.red for w in row)}
+    kept = [r for i, r in enumerate(rows) if i not in red_row_idx] if red_row_idx else rows[:-1]
+    intro = " ".join(_row_text(r) for r in kept).strip()
+    return intro or " ".join(_row_text(r) for r in rows).strip()
 
 
 def _parse_free_response(ex: RawExercise) -> tuple[Optional[str], str]:
@@ -628,6 +685,7 @@ def parse_lama_pdf(
             continue
 
         title = ex.meta.get("Titel", "").strip() or "Imported question"
+        text = _question_text(ex, fmt) or title
 
         if fmt == "Offenes Antwortformat":
             answer, reason = _parse_free_response(ex)
@@ -639,7 +697,7 @@ def parse_lama_pdf(
                     break
                 continue
             question = {
-                "tier": default_tier, "type": "free_response", "text": title,
+                "tier": default_tier, "type": "free_response", "text": text,
                 "accepted_answers": [answer], "points": 1,
             }
             result.imported.append(ParsedQuestion(question=question, review_reason=reason, source=source))
@@ -654,7 +712,7 @@ def parse_lama_pdf(
                     break
                 continue
             question = {
-                "tier": default_tier, "type": "multi_select", "text": title,
+                "tier": default_tier, "type": "multi_select", "text": text,
                 "options": options, "correct_indices": None, "points": 1,
             }
             result.imported.append(ParsedQuestion(question=question, review_reason=reason, source=source))
@@ -673,7 +731,7 @@ def parse_lama_pdf(
                 distractors = distractors[:_MAX_DISTRACTORS]
                 reason += f" (truncated to {_MAX_DISTRACTORS} distractors, our schema's own cap)"
             question = {
-                "tier": default_tier, "type": "matching_pair", "text": title,
+                "tier": default_tier, "type": "matching_pair", "text": text,
                 "pairs": pairs, "distractors": distractors or None, "points": 1,
             }
             result.imported.append(ParsedQuestion(question=question, review_reason=reason, source=source))

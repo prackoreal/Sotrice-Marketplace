@@ -33,7 +33,7 @@ plugin's own agents do, per-area, via small config values.
 
 Two agent TYPES today (`agent_type`, a separate attribute from `kind`):
 "walker" (the original, unhurried pace) and "vehicle" (new — same real
-road graph, same pathfinding, just faster, see `AGENT_TYPE_SPEEDS_MPS`) —
+road graph, same pathfinding, just faster, see `AGENT_TYPE_PHYSICS`) —
 proving "different agent kinds move differently along the same real
 network" with one real second mode, not an exhaustive multi-modal
 transit sim (no buses/bikes tonight, a legitimate later extension).
@@ -66,27 +66,33 @@ DEFAULT_AGENT_COUNT = 8
 # unchanged — this is a brand-new second agent type, not a replacement.
 DEFAULT_VEHICLE_COUNT = 0
 
-# A real, unhurried walking pace for this plugin's OWN walker entities
-# (see `spawn_own_agents`) — separate from `STEER_MAX_SPEED`/
-# `STEER_MAX_ACCEL` above, which govern how physics-test nudges ITS OWN
-# bodies toward a `desired_target`; these walkers have no physics body at
-# all, they just publish a `position` directly, so their speed is a plain
-# distance/time constant, no acceleration curve needed.
-OWN_AGENT_WALK_SPEED_MPS = 1.4
-
-# A car-like pace for the "vehicle" agent type — same road graph, same
-# pathfinding, just faster (roughly city-street car speed, scaled down
-# to this small extract's own meter/second units) — proves "different
-# agent kinds move differently along the same real network" with one
-# real second mode, not a full multi-modal transit simulation.
-VEHICLE_WALK_SPEED_MPS = 6.0
-
-# Every kind of own agent this plugin can spawn, and its own speed —
-# adding a third mode later (a "cyclist", say) is one more entry here
-# plus one more configured-count function, not a structural change.
-AGENT_TYPE_SPEEDS_MPS = {
-    "walker": OWN_AGENT_WALK_SPEED_MPS,
-    "vehicle": VEHICLE_WALK_SPEED_MPS,
+# Real per-agent-type physics parameters — the first piece of the
+# deeper "labels drive real physical behavior" vehicle-physics vision
+# (see project memory's city-spin sandbox/scale-vision entry): each own
+# agent entity now has real acceleration/deceleration limits and mass,
+# not just a flat "move at constant speed" number. Still deliberately
+# simple (a straight-line point mass, no engine curve/traction/gearing)
+# — this is the FOUNDATIONAL piece collision response/weather-reactive
+# behavior/traffic rerouting build on top of, not the whole vision at
+# once.
+#
+# max_speed_mps: top cruising speed (unchanged values from the earlier
+#   flat-speed model, so existing behavior's overall pace doesn't shift).
+# max_accel_mps2: how fast this type can speed up.
+# max_decel_mps2: how fast this type can slow down — deliberately HIGHER
+#   than max_accel for both types (braking is always more forceful than
+#   accelerating, for a walker's muscles or a vehicle's brakes alike),
+#   so an agent decelerates into arrival rather than overshooting a
+#   waypoint and oscillating back.
+# mass_kg: a real, published, physically meaningful number — not yet
+#   consulted by this file's own dynamics (that's collision response's
+#   job, a deliberately separate, later piece — see the vision note on
+#   sequencing each piece independently rather than one unverified
+#   batch), but real and present now so a future collision-response pass
+#   has something genuine to act on rather than inventing it then.
+AGENT_TYPE_PHYSICS = {
+    "walker": {"max_speed_mps": 1.4, "max_accel_mps2": 3.0, "max_decel_mps2": 4.0, "mass_kg": 75.0},
+    "vehicle": {"max_speed_mps": 6.0, "max_accel_mps2": 1.8, "max_decel_mps2": 5.0, "mass_kg": 1400.0},
 }
 
 
@@ -312,7 +318,7 @@ def main():
         # the real road network the same way `plan_route` already does for
         # physics-test's bodies below. Two agent types today — "walker"
         # (the original) and "vehicle" (new: same road graph, same
-        # pathfinding, just faster — see AGENT_TYPE_SPEEDS_MPS) — proving
+        # pathfinding, just faster — see AGENT_TYPE_PHYSICS) — proving
         # "different kinds move differently along the same real network"
         # with one real second mode rather than a full multi-modal
         # transit sim. How many of each spawn is per-area config, see
@@ -330,6 +336,13 @@ def main():
 
         own_positions: dict[int, tuple[float, float]] = {e: (0.0, 0.0) for e, _ in own_agents}
         own_routes: dict[int, list[tuple[float, float]]] = {}
+        # entity -> current speed (m/s), ramped toward each agent_type's
+        # own max_speed_mps by its own max_accel_mps2, and ramped down by
+        # its own max_decel_mps2 when close enough to the current waypoint
+        # that holding max speed would overshoot it — this is what makes
+        # "different agent kinds move differently" a real per-tick dynamic
+        # rather than a single constant swapped in by type.
+        own_speeds: dict[int, float] = {e: 0.0 for e, _ in own_agents}
 
         # entity -> remaining waypoints to walk, in order, as (x, z) tuples
         routes: dict[int, list[tuple[float, float]]] = {}
@@ -418,10 +431,11 @@ def main():
 
                 # This plugin's own agent entities: no physics body, no LOD
                 # gate to respect — just move each one directly toward its
-                # current waypoint, at a speed that depends on its OWN
-                # agent_type (see AGENT_TYPE_SPEEDS_MPS — this is the
-                # entire "different kinds move differently" mechanism),
-                # and publish the result. Same `plan_route` (road pathing
+                # current waypoint, ramping speed up/down per its OWN
+                # agent_type's accel/decel/max-speed (see
+                # AGENT_TYPE_PHYSICS — this is the entire "different kinds
+                # move differently" mechanism), and publish the result.
+                # Same `plan_route` (road pathing
                 # with a building-destination bias, or wander fallback) as
                 # the physics-test-steering path above, just applied to
                 # positions this plugin owns outright instead of a
@@ -439,11 +453,30 @@ def main():
                     target = route[0]
                     dx, dz = target[0] - position[0], target[1] - position[1]
                     distance = math.hypot(dx, dz)
-                    step_distance = AGENT_TYPE_SPEEDS_MPS[agent_type] / DECISION_HZ
+
+                    physics = AGENT_TYPE_PHYSICS[agent_type]
+                    dt = 1.0 / DECISION_HZ
+                    speed = own_speeds[agent_entity]
+                    # Decelerate once current speed's own stopping distance
+                    # (v^2 / 2a) would carry past the waypoint, so arrival
+                    # is a controlled slowdown rather than an overshoot;
+                    # otherwise keep accelerating toward this agent_type's
+                    # own max speed. Both rates come straight out of
+                    # AGENT_TYPE_PHYSICS, so a walker and a vehicle visibly
+                    # speed up/slow down at genuinely different rates.
+                    stopping_distance = (speed * speed) / (2.0 * physics["max_decel_mps2"])
+                    if distance <= stopping_distance:
+                        speed = max(0.0, speed - physics["max_decel_mps2"] * dt)
+                    else:
+                        speed = min(physics["max_speed_mps"], speed + physics["max_accel_mps2"] * dt)
+                    step_distance = speed * dt
+
                     if distance <= step_distance or distance < 1e-6:
                         new_position = target
+                        speed = 0.0
                     else:
                         new_position = (position[0] + dx / distance * step_distance, position[1] + dz / distance * step_distance)
+                    own_speeds[agent_entity] = speed
                     own_positions[agent_entity] = new_position
                     world.set_attribute(agent_entity, "position", {"x": new_position[0], "y": 0.0, "z": new_position[1]})
 

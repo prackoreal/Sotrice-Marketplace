@@ -88,6 +88,48 @@ def main():
             if building.get("name"):
                 world.set_attribute(entity, "building_name", building["name"])
 
+            # No real OSM building:material tag — ask the (optional,
+            # may-not-be-running) ai-test spin to infer a plausible wall
+            # material from the real signal we do have (type/height/
+            # footprint size). ai-test is domain-agnostic and doesn't
+            # know "building" exists; we do the building-specific
+            # prompt-shaping and response-handling here, per
+            # [[project_universal_ai_spin_design]]'s "calling spin shapes
+            # the prompt" rule.
+            if not building.get("wall_material"):
+                world.set_attribute(entity, "ai_request", {
+                    "prompt": (
+                        "You are classifying the primary exterior wall material of a "
+                        "real building for a city-simulation renderer. Reply with ONLY "
+                        "one word from this list: brick, concrete, stucco, wood, glass, "
+                        "stone, metal. Base your answer on the building type, height, and "
+                        "footprint size given in the context."
+                    ),
+                    "context": {
+                        "building_type": building.get("building_type"),
+                        "height_m": building["height_m"],
+                        "height_source": building["height_source"],
+                        "footprint": building["footprint"],
+                    },
+                    "request_id": f"wall-material-{entity}",
+                    "task_hint": "simple",
+                })
+
+        def handle_ai_material_response(entity, attribute, value, source):
+            if not isinstance(value, dict):
+                return
+            request_id = value.get("request_id")
+            if not isinstance(request_id, str) or not request_id.startswith("wall-material-"):
+                return
+            text = value.get("text")
+            if not text:
+                return
+            material = text.strip().split()[0].strip(".,").lower()
+            world.set_attribute(entity, "building_material", material)
+            world.set_attribute(entity, "building_material_source", "ai")
+
+        world.subscribe("ai_response", handle_ai_material_response, replay=True)
+
         print(f"[{name}] published — idle (this is a static data source, nothing to tick). Ctrl+C to stop")
         try:
             # A pure data-source plugin: publish once, then just stay
