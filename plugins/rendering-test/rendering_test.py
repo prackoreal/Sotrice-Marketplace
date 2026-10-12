@@ -52,6 +52,20 @@ DEFAULT_RENDER_SETTINGS: dict[str, Any] = {
     # powerPreference hint (see SceneView.tsx), which is the one real,
     # if crude, effect it has today.
     "compute_device": "auto",
+    # "vector" | "photorealistic" | "grid" -- which of rendering-test-ui's
+    # three interchangeable view renderers is active (see SceneView.tsx,
+    # CesiumView.tsx, GridView.tsx). Core-backed like every other setting
+    # here so it's remotely discoverable/settable the same way, not just
+    # local React state -- a second connected client (or a future
+    # automation/AI-analyst consumer) can read or drive which view mode
+    # is showing without needing any new plumbing.
+    "view_mode": "vector",
+    # Grid view's wireframe line color, any CSS hex string. Default is a
+    # clean, modern Google-ish light blue (Google's standard "Google
+    # Blue", #4285F4 -- also used across Gemini's own UI accents) per
+    # Laszlo's stated preference; purely a starting point, fully
+    # user-configurable from the settings panel.
+    "grid_line_color": "#4285F4",
 }
 
 
