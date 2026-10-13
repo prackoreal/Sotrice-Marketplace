@@ -23,7 +23,8 @@
         "MathClass"
       ],
       "author": "prackoreal",
-      "file": "math-student.spin"
+      "file": "math-student.spin",
+      "category": "Math companions"
     },
     {
       "type": "graphing",
@@ -34,7 +35,8 @@
       ],
       "depends_on": [],
       "author": "prackoreal",
-      "file": "graphing.spin"
+      "file": "graphing.spin",
+      "category": "Math companions"
     },
     {
       "type": "lama-bank",
@@ -47,7 +49,8 @@
         "MathClass"
       ],
       "author": "prackoreal",
-      "file": "lama-bank.spin"
+      "file": "lama-bank.spin",
+      "category": "Math companions"
     },
     {
       "type": "ai-test",
@@ -58,7 +61,8 @@
       ],
       "depends_on": [],
       "author": "prackoreal",
-      "file": "ai-test.spin"
+      "file": "ai-test.spin",
+      "category": "Shared utility"
     },
     {
       "type": "physics-test",
@@ -155,7 +159,7 @@
     {
       "name": "Math Plugin",
       "version": "0.4.1",
-      "description": "A teacher runs a real math class (multiple choice, free response, multi-select, matching-pair with distractors, adaptive difficulty, streaks, an opt-in scoreboard, live mid-session editing, per-class identity, persistence across restarts) and a real student joins by code from their own device to answer live. The math-student testing bot and the 2D/3D graphing calculator are both separate, optional plugins -- install them individually if you want them; they no longer come bundled in by default.",
+      "description": "A teacher runs a real math class (multiple choice, free response, multi-select, matching-pair with distractors, adaptive difficulty, streaks, an opt-in scoreboard, live mid-session editing, per-class identity, persistence across restarts) and a real student joins by code from their own device to answer live. The math-student testing bot, the 2D/3D graphing calculator, and the LaMa worksheet bank (lama-bank) are all separate, optional companions listed under \"Math companions\" below -- install any of them individually if you want them; none come bundled in by default.",
       "includes": [
         "math-teacher"
       ]
