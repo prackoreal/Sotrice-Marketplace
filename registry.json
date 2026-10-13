@@ -3,7 +3,7 @@
   "plugins": [
     {
       "type": "math-teacher",
-      "version": "0.4.8",
+      "version": "0.4.9",
       "description": "Runs a math class: a real question-authoring UI (multiple choice, free response, multi-select, matching-pair with distractors), adaptive per-student difficulty (off by default; teacher-toggleable automatic/manual, asymmetric -- 3-in-a-row correct to move up a tier, 2-in-a-row wrong to move down), a correctness streak and opt-in scoreboard per student, live mid-session editing via a teacher_command control attribute, a per-class identity (class_code/class_name) so more than one class can run on the same machine without their data mixing, and persistence -- a class's identity, roster, and question bank survive the process exiting, and can be resumed later. LaMa catalog imports can file into a brand-new chapter or reuse an already-saved one. Install math-student alongside it, or have a real student join by code from their own device, to see the tally move.",
       "concepts": [
         "MathClass"
@@ -158,7 +158,7 @@
   "packages": [
     {
       "name": "Math Plugin",
-      "version": "0.4.1",
+      "version": "0.4.9",
       "description": "A teacher runs a real math class (multiple choice, free response, multi-select, matching-pair with distractors, adaptive difficulty, streaks, an opt-in scoreboard, live mid-session editing, per-class identity, persistence across restarts) and a real student joins by code from their own device to answer live. The math-student testing bot, the 2D/3D graphing calculator, and the LaMa worksheet bank (lama-bank) are all separate, optional companions listed under \"Math companions\" below -- install any of them individually if you want them; none come bundled in by default.",
       "includes": [
         "math-teacher"
