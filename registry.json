@@ -91,7 +91,7 @@
       "concepts": [
         "CityRoads"
       ],
-      "depends_on": [],
+      "depends_on": ["CityBuildings"],
       "author": "prackoreal",
       "file": "city-roads.spin"
     },

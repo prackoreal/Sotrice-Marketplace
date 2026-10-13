@@ -34,6 +34,7 @@ import json
 import os
 import time
 
+import road_regen
 from sotrice_client import World
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "city_roads_data")
@@ -61,12 +62,42 @@ def load_road_data():
         return json.load(f)
 
 
+def roads_overlay_path(area: str) -> str:
+    return os.path.join(DATA_DIR, f"{area}_roads_overlay.json")
+
+
+def load_roads_overlay(area: str) -> dict:
+    """A sequence of sandbox-mode local road regenerations, each
+    triggered by a building move (see road_regen.py and the design
+    memory this was built from). Replayed in order on top of the real
+    OSM extract at load time — the extract file itself is never mutated
+    (keeps the real ODbL data honest/untouched); this is Sotrice's own
+    generated geometry layered on top."""
+    path = roads_overlay_path(area)
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    return {"regenerations": []}
+
+
+def save_roads_overlay(area: str, overlay: dict) -> None:
+    with open(roads_overlay_path(area), "w", encoding="utf-8") as f:
+        json.dump(overlay, f, indent=2)
+
+
 def main():
     with World() as world:
         name = world.identify("city-roads")
         print(f"[{name}] loading road extract for area {active_area()!r}")
 
+        area = active_area()
         data = load_road_data()
+        overlay = load_roads_overlay(area)
+        for record in overlay["regenerations"]:
+            road_regen.apply_regeneration(data["nodes"], data["edges"], record)
+        if overlay["regenerations"]:
+            print(f"[{name}] replayed {len(overlay['regenerations'])} persisted sandbox "
+                  f"road regeneration(s) from a previous session")
         print(
             f"[{name}] {data['area_description']} — "
             f"{len(data['nodes'])} nodes, {len(data['edges'])} directed edges "
@@ -86,6 +117,48 @@ def main():
         world.set_attribute(control, "road_network", {"nodes": data["nodes"], "edges": data["edges"]})
         world.set_attribute(control, "road_attribution", data["attribution"])
         world.set_attribute(control, "road_area_description", data["area_description"])
+
+        # Sandbox mode: a real, NEW cross-plugin dependency on
+        # city-buildings (this file used to subscribe to nothing at
+        # all). When a building's footprint genuinely CHANGES (a drag
+        # move in rendering-test-ui, relayed via city_buildings.py), the
+        # local road network around it is regenerated so roads reconnect
+        # sensibly instead of cutting through the building's new spot.
+        # See road_regen.py for the actual geometry and the design
+        # memory (project_city_spin_sandbox_road_regen_design) for why
+        # it's scoped the way it is.
+        #
+        # last_footprint_by_entity distinguishes "first time this
+        # entity's footprint is seen" (either a pristine building, or —
+        # at our own startup — a building whose overlay-adjusted
+        # position already reflects a PAST move that this file's own
+        # roads overlay already regenerated for) from a genuine LIVE
+        # move during this run. Only the latter triggers regeneration —
+        # this makes replay-on-subscribe and restart both naturally
+        # idempotent with no extra bookkeeping needed.
+        last_footprint_by_entity = {}
+
+        def handle_building_footprint(entity, attribute, value, source):
+            if not isinstance(value, list):
+                return
+            points = [(p["x"], p["z"]) for p in value]
+            previous = last_footprint_by_entity.get(entity)
+            last_footprint_by_entity[entity] = points
+            if previous is None or previous == points:
+                return
+
+            record = road_regen.regenerate_around_building(
+                data["nodes"], data["edges"], points, f"e{entity}",
+            )
+            road_regen.apply_regeneration(data["nodes"], data["edges"], record)
+            overlay["regenerations"].append(record)
+            save_roads_overlay(area, overlay)
+            world.set_attribute(control, "road_network", {"nodes": data["nodes"], "edges": data["edges"]})
+            print(f"[{name}] regenerated local roads around moved building (entity {entity}): "
+                  f"-{len(record['removed_node_ids'])} node(s), "
+                  f"+{len(record['added_nodes'])} synthetic bypass node(s)")
+
+        world.subscribe("building_footprint", handle_building_footprint, replay=True)
 
         print(f"[{name}] published — idle (this is a static data source, nothing to tick). Ctrl+C to stop")
         try:
