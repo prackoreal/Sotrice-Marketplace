@@ -85,6 +85,30 @@ def save_roads_overlay(area: str, overlay: dict) -> None:
         json.dump(overlay, f, indent=2)
 
 
+def underground_layer_path(area: str) -> str:
+    return os.path.join(DATA_DIR, f"{area}_underground.json")
+
+
+def load_underground_layer(area: str) -> dict:
+    """A fully SYNTHETIC (invented, not OpenStreetMap-sourced) underground
+    transit/tunnel layer — generated once by
+    `scripts/generate_synthetic_underground.py` from
+    `city_roads_data/underground_config.json` and checked in as its own
+    `<area>_underground.json` file, entirely separate from the real OSM
+    extract so the two provenances never blur together. Every node/edge
+    in it carries `"synthetic": true` and a `"layer"` of `"surface"` or
+    `"underground"`; real OSM nodes/edges never have either field (treat
+    a missing `layer` as `"surface"`). Missing file (no underground
+    layer authored for this area yet) just means no underground
+    geometry publishes — same graceful-by-default convention
+    `active_area.json` already uses."""
+    path = underground_layer_path(area)
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    return {"nodes": {}, "edges": []}
+
+
 def main():
     with World() as world:
         name = world.identify("city-roads")
@@ -93,6 +117,24 @@ def main():
         area = active_area()
         data = load_road_data()
         overlay = load_roads_overlay(area)
+        underground = load_underground_layer(area)
+        if underground["nodes"]:
+            print(f"[{name}] loaded {len(underground['nodes'])} synthetic underground node(s), "
+                  f"{len(underground['edges'])} synthetic underground edge(s) (not OpenStreetMap data)")
+
+        def published_road_network():
+            # Underground nodes/edges are merged in ONLY here, at publish
+            # time — never into `data["nodes"]`/`data["edges"]` themselves.
+            # road_regen.regenerate_around_building() below only ever looks
+            # at x/z, so a real-world building move sharing an x/z spot
+            # with a deep-underground synthetic node would otherwise get
+            # treated as blocking real road geometry that was never there.
+            # Keeping the two graphs separate until this one merge point
+            # means road_regen's behavior is byte-for-byte unchanged.
+            nodes = dict(data["nodes"])
+            nodes.update(underground["nodes"])
+            edges = list(data["edges"]) + list(underground["edges"])
+            return {"nodes": nodes, "edges": edges}
         for record in overlay["regenerations"]:
             road_regen.apply_regeneration(data["nodes"], data["edges"], record)
         if overlay["regenerations"]:
@@ -114,7 +156,7 @@ def main():
         # lat/lon, and edges as (from, to, length_m, name, highway)
         # tuples — already directed, so a consumer never needs to
         # re-derive oneway handling itself.
-        world.set_attribute(control, "road_network", {"nodes": data["nodes"], "edges": data["edges"]})
+        world.set_attribute(control, "road_network", published_road_network())
         world.set_attribute(control, "road_attribution", data["attribution"])
         world.set_attribute(control, "road_area_description", data["area_description"])
 
@@ -153,7 +195,7 @@ def main():
             road_regen.apply_regeneration(data["nodes"], data["edges"], record)
             overlay["regenerations"].append(record)
             save_roads_overlay(area, overlay)
-            world.set_attribute(control, "road_network", {"nodes": data["nodes"], "edges": data["edges"]})
+            world.set_attribute(control, "road_network", published_road_network())
             print(f"[{name}] regenerated local roads around moved building (entity {entity}): "
                   f"-{len(record['removed_node_ids'])} node(s), "
                   f"+{len(record['added_nodes'])} synthetic bypass node(s)")

@@ -1,0 +1,30 @@
+{
+  "area": "klosterneuburg_center",
+  "note": "Fully SYNTHETIC (invented, not OpenStreetMap-sourced) underground transit/tunnel layout for this area, authored purely so rendering-test-ui's Grid view has real underground geometry to render distinctly from surface roads -- this town is too small to have an actual subway. Edit this file and re-run scripts/generate_synthetic_underground.py to regenerate; never hand-edit the generated *_underground.json output.",
+  "subway_lines": [
+    {
+      "id": "u1",
+      "name": "Synthetic U1 (demo subway line, not real)",
+      "depth_m": 14.0,
+      "stations": [
+        { "id": "u1_s1", "x": -25.0, "z": -15.0, "label": "Schiefergarten (synthetic station)" },
+        { "id": "u1_s2", "x": 25.0, "z": 15.0, "label": "Wiener Strasse Mitte (synthetic station)" },
+        { "id": "u1_s3", "x": 75.0, "z": 45.0, "label": "Pater-Abel-Platz (synthetic station)" },
+        { "id": "u1_s4", "x": 125.0, "z": 75.0, "label": "Klosterneuburg Ost (synthetic station)" }
+      ]
+    }
+  ],
+  "car_tunnels": [
+    {
+      "id": "t1",
+      "name": "Umfahrung Unterfuehrung (synthetic car tunnel)",
+      "depth_m": 6.0,
+      "path": [
+        { "id": "t1_p0", "x": -30.0, "z": 0.0 },
+        { "id": "t1_p1", "x": 0.0, "z": -5.0 },
+        { "id": "t1_p2", "x": 30.0, "z": 0.0 },
+        { "id": "t1_p3", "x": 60.0, "z": 10.0 }
+      ]
+    }
+  ]
+}

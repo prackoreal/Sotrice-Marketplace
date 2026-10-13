@@ -1,0 +1,203 @@
+{
+  "nodes": {
+    "u1_s1": {
+      "x": -25.0,
+      "z": -15.0,
+      "y": -14.0,
+      "lat": 48.30525318903804,
+      "lon": 16.327189677480064,
+      "layer": "underground",
+      "synthetic": true,
+      "label": "Schiefergarten (synthetic station)"
+    },
+    "u1_s2": {
+      "x": 25.0,
+      "z": 15.0,
+      "y": -14.0,
+      "lat": 48.30552268239053,
+      "lon": 16.327864936805646,
+      "layer": "underground",
+      "synthetic": true,
+      "label": "Wiener Strasse Mitte (synthetic station)"
+    },
+    "u1_s3": {
+      "x": 75.0,
+      "z": 45.0,
+      "y": -14.0,
+      "lat": 48.30579217574303,
+      "lon": 16.328540196131225,
+      "layer": "underground",
+      "synthetic": true,
+      "label": "Pater-Abel-Platz (synthetic station)"
+    },
+    "u1_s4": {
+      "x": 125.0,
+      "z": 75.0,
+      "y": -14.0,
+      "lat": 48.30606166909553,
+      "lon": 16.329215455456804,
+      "layer": "underground",
+      "synthetic": true,
+      "label": "Klosterneuburg Ost (synthetic station)"
+    },
+    "t1_p0": {
+      "x": -30.0,
+      "z": 0.0,
+      "y": 0.0,
+      "lat": 48.305387935714286,
+      "lon": 16.327122151547506,
+      "layer": "surface",
+      "synthetic": true
+    },
+    "t1_p1": {
+      "x": 0.0,
+      "z": -5.0,
+      "y": -6.0,
+      "lat": 48.30534302015554,
+      "lon": 16.327527307142855,
+      "layer": "underground",
+      "synthetic": true
+    },
+    "t1_p2": {
+      "x": 30.0,
+      "z": 0.0,
+      "y": -6.0,
+      "lat": 48.305387935714286,
+      "lon": 16.327932462738204,
+      "layer": "underground",
+      "synthetic": true
+    },
+    "t1_p3": {
+      "x": 60.0,
+      "z": 10.0,
+      "y": 0.0,
+      "lat": 48.305477766831785,
+      "lon": 16.328337618333553,
+      "layer": "surface",
+      "synthetic": true
+    }
+  },
+  "edges": [
+    {
+      "from": "u1_s1",
+      "to": "u1_s2",
+      "length_m": 58.31,
+      "name": "Synthetic U1 (demo subway line, not real)",
+      "highway": "subway",
+      "transport_mode": "subway",
+      "layer": "underground",
+      "synthetic": true
+    },
+    {
+      "from": "u1_s2",
+      "to": "u1_s1",
+      "length_m": 58.31,
+      "name": "Synthetic U1 (demo subway line, not real)",
+      "highway": "subway",
+      "transport_mode": "subway",
+      "layer": "underground",
+      "synthetic": true
+    },
+    {
+      "from": "u1_s2",
+      "to": "u1_s3",
+      "length_m": 58.31,
+      "name": "Synthetic U1 (demo subway line, not real)",
+      "highway": "subway",
+      "transport_mode": "subway",
+      "layer": "underground",
+      "synthetic": true
+    },
+    {
+      "from": "u1_s3",
+      "to": "u1_s2",
+      "length_m": 58.31,
+      "name": "Synthetic U1 (demo subway line, not real)",
+      "highway": "subway",
+      "transport_mode": "subway",
+      "layer": "underground",
+      "synthetic": true
+    },
+    {
+      "from": "u1_s3",
+      "to": "u1_s4",
+      "length_m": 58.31,
+      "name": "Synthetic U1 (demo subway line, not real)",
+      "highway": "subway",
+      "transport_mode": "subway",
+      "layer": "underground",
+      "synthetic": true
+    },
+    {
+      "from": "u1_s4",
+      "to": "u1_s3",
+      "length_m": 58.31,
+      "name": "Synthetic U1 (demo subway line, not real)",
+      "highway": "subway",
+      "transport_mode": "subway",
+      "layer": "underground",
+      "synthetic": true
+    },
+    {
+      "from": "t1_p0",
+      "to": "t1_p1",
+      "length_m": 30.41,
+      "name": "Umfahrung Unterfuehrung (synthetic car tunnel)",
+      "highway": "service",
+      "transport_mode": "car",
+      "layer": "underground",
+      "synthetic": true
+    },
+    {
+      "from": "t1_p1",
+      "to": "t1_p0",
+      "length_m": 30.41,
+      "name": "Umfahrung Unterfuehrung (synthetic car tunnel)",
+      "highway": "service",
+      "transport_mode": "car",
+      "layer": "underground",
+      "synthetic": true
+    },
+    {
+      "from": "t1_p1",
+      "to": "t1_p2",
+      "length_m": 30.41,
+      "name": "Umfahrung Unterfuehrung (synthetic car tunnel)",
+      "highway": "service",
+      "transport_mode": "car",
+      "layer": "underground",
+      "synthetic": true
+    },
+    {
+      "from": "t1_p2",
+      "to": "t1_p1",
+      "length_m": 30.41,
+      "name": "Umfahrung Unterfuehrung (synthetic car tunnel)",
+      "highway": "service",
+      "transport_mode": "car",
+      "layer": "underground",
+      "synthetic": true
+    },
+    {
+      "from": "t1_p2",
+      "to": "t1_p3",
+      "length_m": 31.62,
+      "name": "Umfahrung Unterfuehrung (synthetic car tunnel)",
+      "highway": "service",
+      "transport_mode": "car",
+      "layer": "underground",
+      "synthetic": true
+    },
+    {
+      "from": "t1_p3",
+      "to": "t1_p2",
+      "length_m": 31.62,
+      "name": "Umfahrung Unterfuehrung (synthetic car tunnel)",
+      "highway": "service",
+      "transport_mode": "car",
+      "layer": "underground",
+      "synthetic": true
+    }
+  ],
+  "source": "synthetic (generated, not from OpenStreetMap)"
+}
