@@ -128,6 +128,12 @@ with World() as world:
         """Mirrors math_teacher.py's own class_attr() exactly."""
         return f"{attr_name}:{class_code}"
 
+    # Admits this bot into the class's lobby roster immediately, same as
+    # a real student's own UI does the moment it discovers class_code —
+    # see math_teacher.py's "Starting a class"/on_student_joined. Value
+    # itself carries no information; only that the push happened at all.
+    world.set_attribute(me, class_attr("student_joined"), True)
+
     print(f"[{name}] found class (code {class_code})", flush=True)
 
     # Fallback (pre-tiering) question content.
