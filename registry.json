@@ -54,7 +54,7 @@
     },
     {
       "type": "ai-test",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "Universal AI spin — one domain-agnostic request/response mechanism shared by the math spin's AI tab and, later, a city spin's own analyst UI, per the same 'one shared engine, two presentations' design already used for compute plugins elsewhere. Watches any entity's ai_request attribute (prompt + optional context payload + optional request_id/task_hint, no enumeration, pure subscribe-by-name) and calls the real Gemini API (gemini-3.8-flash capable / gemini-3.1-flash-lite budget, automatic per-request selection), writing an ai_response attribute back onto that same entity. Has no idea which spin, if any, is asking. Ships its own Settings UI (ai-test-ui) for the real per-user Gemini API key and cost/quality bias, falling back to a dev-only local-secrets key when neither has ever been set.",
       "concepts": [
         "UniversalAI"
