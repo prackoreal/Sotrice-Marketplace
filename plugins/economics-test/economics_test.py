@@ -35,6 +35,23 @@ city-layout's entities):
    file with `--selftest`) rather than only ever proven by a live run
    that happens to never trigger it.
 
+3. `building_revenue_estimate_eur` — the first real piece of "per-building
+   editable economics" (see project memory's sandbox/scale-vision entry):
+   `building_goods_price_eur` (an editable field, see city_buildings.py's
+   ALLOWED_EDIT_FIELDS) times the SAME `building_traffic_visits_count`
+   metric above, for any building whose user-set `building_type` is
+   "shop" — a deliberately simple real-footfall-times-price model, not a
+   real economic simulation (no margins, no restocking, no competition).
+   Only published once BOTH a type of "shop" and a real price are known;
+   a building with no price set, or a non-shop type, never gets this
+   attribute at all, same "don't fabricate a number nothing backs"
+   discipline as every other metric here. Recomputed live any time EITHER
+   input changes: a fresh traffic visit, a price edit, or a type edit
+   (including a shop being retyped to something else, which correctly
+   stops it from recomputing further, though the last-published value is
+   not retracted -- Core has no "unset this attribute" operation, matching
+   every other plugin's own limitation here).
+
 This is a completely ordinary watch/write relay plugin: discovers
 buildings/roads/movers purely by subscribing to attribute NAMES
 (`building_position`, `road_network`, `position`) with `replay=True`
@@ -77,6 +94,20 @@ class EconomicsState:
         self.buildings: dict[int, tuple[float, float]] = {}
         self.traffic_counts: dict[int, int] = {}
         self.last_counted: dict[tuple[int, int], float] = {}
+        # User-editable economics (city_buildings.py's
+        # building_type/building_goods_price_eur) -- both optional, a
+        # building only gets a revenue estimate once it's genuinely a
+        # "shop" AND has a real price.
+        self.building_types: dict[int, str] = {}
+        self.goods_price_eur: dict[int, float] = {}
+
+    def revenue_estimate(self, building_entity: int) -> float | None:
+        if self.building_types.get(building_entity) != "shop":
+            return None
+        price = self.goods_price_eur.get(building_entity)
+        if price is None:
+            return None
+        return round(price * self.traffic_counts.get(building_entity, 0), 2)
 
     def nearest_road(self, position: tuple[float, float]):
         """Returns (distance_m, road_name_or_none), or None if no road
@@ -162,12 +193,31 @@ def main():
             now = time.monotonic()
             with state.lock:
                 fresh_visits = state.register_visit(entity, mover_position, now)
-            for building_entity, count in fresh_visits:
+                revenue_by_building = [(e, c, state.revenue_estimate(e)) for e, c in fresh_visits]
+            for building_entity, count, revenue in revenue_by_building:
                 world.set_attribute(building_entity, "building_traffic_visits_count", count)
+                if revenue is not None:
+                    world.set_attribute(building_entity, "building_revenue_estimate_eur", revenue)
+
+        def on_building_type(entity, attribute, value, source):
+            with state.lock:
+                state.building_types[entity] = value if isinstance(value, str) else None
+                revenue = state.revenue_estimate(entity)
+            if revenue is not None:
+                world.set_attribute(entity, "building_revenue_estimate_eur", revenue)
+
+        def on_building_goods_price(entity, attribute, value, source):
+            with state.lock:
+                state.goods_price_eur[entity] = float(value) if isinstance(value, (int, float)) else None
+                revenue = state.revenue_estimate(entity)
+            if revenue is not None:
+                world.set_attribute(entity, "building_revenue_estimate_eur", revenue)
 
         world.subscribe("road_network", on_road_network, replay=True)
         world.subscribe("building_position", on_building_position, replay=True)
         world.subscribe("position", on_moving_position, replay=False)
+        world.subscribe("building_type", on_building_type, replay=True)
+        world.subscribe("building_goods_price_eur", on_building_goods_price, replay=True)
 
         print(f"[{name}] running — Ctrl+C to stop")
         try:
@@ -211,6 +261,14 @@ def _selftest():
     # A mover far away must never count.
     visits_far = state.register_visit(mover_entity=9, mover_position=(0.0, 0.0), now=now + 100.0)
     assert visits_far == [], f"a mover far outside TRAFFIC_RADIUS_M must never count, got {visits_far}"
+
+    # Revenue estimate: absent until BOTH type=="shop" and a price are known.
+    assert state.revenue_estimate(42) is None, "no type/price known yet must not fabricate a revenue number"
+    state.building_types[42] = "residential"
+    state.goods_price_eur[42] = 5.0
+    assert state.revenue_estimate(42) is None, "a non-shop building must never get a revenue estimate"
+    state.building_types[42] = "shop"
+    assert state.revenue_estimate(42) == 10.0, f"expected price(5.0) * visits(2) = 10.0, got {state.revenue_estimate(42)}"
 
     print("economics_test._selftest: all assertions passed")
 

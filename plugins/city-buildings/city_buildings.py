@@ -65,6 +65,36 @@ def _validate_name(value):
     return True, cleaned
 
 
+# A real OSM `building=*` tag is free text (e.g. "yes", "house",
+# "retail" -- see scripts/extract_city_buildings.py), not a fixed
+# vocabulary, so this is deliberately a smaller, curated DESIGNATION list
+# for what a user can deliberately set a building TO, not a mirror of
+# every raw OSM value this project happens to import. Per-building
+# economics (see economics_test.py's building_revenue_estimate_eur) only
+# activates for "shop" today -- the others are real, published, and
+# renderable, just not yet economically modeled, same "build what's
+# genuinely demonstrable first" discipline as every other skeleton here.
+KNOWN_BUILDING_TYPES = {"shop", "residential", "office", "restaurant", "warehouse", "industrial", "civic", "other"}
+
+
+def _validate_building_type(value):
+    if not isinstance(value, str):
+        return False, "building_type must be a string"
+    cleaned = value.strip().lower()
+    if cleaned not in KNOWN_BUILDING_TYPES:
+        return False, f"{value!r} isn't a supported building type (try: {', '.join(sorted(KNOWN_BUILDING_TYPES))})"
+    return True, cleaned
+
+
+def _validate_goods_price(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False, "building_goods_price_eur must be a number"
+    cleaned = float(value)
+    if not (0.01 <= cleaned <= 1_000_000.0):
+        return False, "building_goods_price_eur must be between 0.01 and 1,000,000"
+    return True, round(cleaned, 2)
+
+
 # The whitelist of what a building_edit_request is actually allowed to
 # touch, and how each one is validated -- deliberately small, each entry
 # independently demonstrable. This exists so an untrusted AI-generated
@@ -79,6 +109,8 @@ ALLOWED_EDIT_FIELDS = {
     "building_material": {"overlay_key": "wall_material", "validate": _validate_material},
     "building_height_m": {"overlay_key": "height_m", "validate": _validate_height},
     "building_name": {"overlay_key": "name", "validate": _validate_name},
+    "building_type": {"overlay_key": "building_type", "validate": _validate_building_type},
+    "building_goods_price_eur": {"overlay_key": "goods_price_eur", "validate": _validate_goods_price},
 }
 
 
@@ -142,6 +174,10 @@ def main():
                     building["height_m"] = moved["height_m"]
                 if "name" in moved:
                     building["name"] = moved["name"]
+                if "building_type" in moved:
+                    building["building_type"] = moved["building_type"]
+                if "goods_price_eur" in moved:
+                    building["goods_price_eur"] = moved["goods_price_eur"]
         real_height_count = sum(1 for b in data["buildings"] if b["height_source"] == "tag")
         print(
             f"[{name}] {data['area_description']} — {len(data['buildings'])} buildings "
@@ -174,6 +210,8 @@ def main():
                 world.set_attribute(entity, "building_type", building["building_type"])
             if building.get("name"):
                 world.set_attribute(entity, "building_name", building["name"])
+            if building.get("goods_price_eur") is not None:
+                world.set_attribute(entity, "building_goods_price_eur", building["goods_price_eur"])
 
             # No real OSM building:material tag — ask the (optional,
             # may-not-be-running) ai-test spin to infer a plausible wall

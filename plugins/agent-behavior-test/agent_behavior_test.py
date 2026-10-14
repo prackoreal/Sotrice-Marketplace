@@ -33,7 +33,7 @@ plugin's own agents do, per-area, via small config values.
 
 Two agent TYPES today (`agent_type`, a separate attribute from `kind`):
 "walker" (the original, unhurried pace) and "vehicle" (new — same real
-road graph, same pathfinding, just faster, see `AGENT_TYPE_PHYSICS`) —
+road graph, same pathfinding, just faster, see the live `agent_behavior_settings` control attribute built by `default_agent_behavior_settings`) —
 proving "different agent kinds move differently along the same real
 network" with one real second mode, not an exhaustive multi-modal
 transit sim (no buses/bikes tonight, a legitimate later extension).
@@ -50,6 +50,7 @@ import os
 import random
 import threading
 import time
+from typing import Any
 
 from sotrice_client import World
 
@@ -90,7 +91,10 @@ DEFAULT_VEHICLE_COUNT = 0
 #   sequencing each piece independently rather than one unverified
 #   batch), but real and present now so a future collision-response pass
 #   has something genuine to act on rather than inventing it then.
-AGENT_TYPE_PHYSICS = {
+# These are DEFAULTS only now -- see agent_behavior_settings below. Kept
+# as named module constants (rather than inlined into the dict literal)
+# so their own doc comments above stay attached to the actual numbers.
+DEFAULT_AGENT_TYPE_PHYSICS = {
     "walker": {"max_speed_mps": 1.4, "max_accel_mps2": 3.0, "max_decel_mps2": 4.0, "mass_kg": 75.0},
     "vehicle": {"max_speed_mps": 6.0, "max_accel_mps2": 1.8, "max_decel_mps2": 5.0, "mass_kg": 1400.0},
 }
@@ -149,14 +153,41 @@ ROAD_DESTINATION_RADIUS = 60.0
 # building_traffic_visits_count in an ordinary live run — the pure-random
 # choice already visits a building's neighborhood sometimes just by
 # chance (buildings sit right next to real roads), this just makes it
-# reliable rather than lucky.
-BUILDING_DESTINATION_BIAS = 0.6
+# reliable rather than lucky. Default only now -- see
+# agent_behavior_settings below.
+DEFAULT_BUILDING_DESTINATION_BIAS = 0.6
 
 # How close (in the horizontal plane) counts as "arrived" at a waypoint —
 # advances to the next one (or picks a new destination) once within this
 # distance, rather than orbiting the old one forever as steering's own
 # overshoot/correction keeps nudging it.
 ARRIVAL_RADIUS = 1.0
+
+
+def default_agent_behavior_settings() -> dict[str, Any]:
+    """This plugin's OWN live, Core-backed settings — exactly the "stuff
+    about their behaviour, randomness and so" Laszlo asked to be able to
+    edit, from either this spin's own canvas widget or city settings'
+    umbrella panel (two UI surfaces, one underlying attribute — see
+    agent-behavior-test-ui's App.tsx and rendering-test-ui's
+    SettingsPanel.tsx, both of which read/write this exact dict).
+
+    `walker_count`/`vehicle_count` seed from active_area.json the same
+    way they always have (configured_agent_count/configured_vehicle_count)
+    so an edit from either settings UI stays consistent with that file —
+    but there's no entity-deletion primitive in Core today, so shrinking
+    a running population isn't possible, and growing one live would make
+    the two directions behave inconsistently (one half working, one
+    half not); both wait for this plugin's next restart rather than
+    offering a half-working live control. `building_destination_bias`
+    and `agent_type_physics` DO apply immediately, every tick, with no
+    restart needed — see on_settings_changed in main()."""
+    return {
+        "walker_count": configured_agent_count(),
+        "vehicle_count": configured_vehicle_count(),
+        "building_destination_bias": DEFAULT_BUILDING_DESTINATION_BIAS,
+        "agent_type_physics": {agent_type: dict(physics) for agent_type, physics in DEFAULT_AGENT_TYPE_PHYSICS.items()},
+    }
 
 
 def pick_wander_target():
@@ -273,6 +304,58 @@ def main():
         print(f"[{name}] watching physics-test's scene for full-tier bodies to move")
 
         state_lock = threading.Lock()
+
+        # This plugin's own control entity + live settings — same shape
+        # as rendering_test.py's "render_settings" / graphing.py's
+        # "graphs": own ONE control Entity, publish OWN settings LAST so
+        # a replay-subscriber never has to think about ordering, and
+        # accept live external edits via a replay=False subscribe on the
+        # same attribute. `live_settings` is read under `state_lock`
+        # from the decision loop below and mutated under the same lock
+        # by on_settings_changed, so a setting edited mid-tick never
+        # produces a half-applied read.
+        control = world.create_entity()
+        world.set_attribute(control, "kind", "agent_behavior_control")
+        live_settings: dict[str, Any] = default_agent_behavior_settings()
+        world.set_attribute(control, "agent_behavior_settings", live_settings)
+        print(f"[{name}] control entity {control}, settings={live_settings}", flush=True)
+
+        def on_settings_changed(entity, _name, value, source) -> None:
+            if source == name:
+                return
+            if not isinstance(value, dict):
+                return
+            with state_lock:
+                if "building_destination_bias" in value:
+                    try:
+                        live_settings["building_destination_bias"] = float(value["building_destination_bias"])
+                    except (TypeError, ValueError):
+                        pass
+                physics_update = value.get("agent_type_physics")
+                if isinstance(physics_update, dict):
+                    for agent_type, physics in physics_update.items():
+                        if agent_type in live_settings["agent_type_physics"] and isinstance(physics, dict):
+                            live_settings["agent_type_physics"][agent_type].update(physics)
+                # walker_count/vehicle_count are recorded (so both settings
+                # UIs stay in agreement, and a fresh active_area.json write
+                # isn't the only way to see the current intended count) but
+                # intentionally NOT applied to the already-spawned
+                # own_agents list below -- see default_agent_behavior_settings's
+                # own doc comment on why counts need a restart.
+                if "walker_count" in value:
+                    try:
+                        live_settings["walker_count"] = int(value["walker_count"])
+                    except (TypeError, ValueError):
+                        pass
+                if "vehicle_count" in value:
+                    try:
+                        live_settings["vehicle_count"] = int(value["vehicle_count"])
+                    except (TypeError, ValueError):
+                        pass
+            print(f"[{name}] agent_behavior_settings updated externally (entity {entity}, source {source}): {value}", flush=True)
+
+        world.subscribe("agent_behavior_settings", on_settings_changed, replay=False)
+
         # entity -> latest known (x, z) position
         positions: dict[int, tuple[float, float]] = {}
         # entity -> latest known LOD tier — only "full" tier bodies get a
@@ -318,13 +401,13 @@ def main():
         # the real road network the same way `plan_route` already does for
         # physics-test's bodies below. Two agent types today — "walker"
         # (the original) and "vehicle" (new: same road graph, same
-        # pathfinding, just faster — see AGENT_TYPE_PHYSICS) — proving
+        # pathfinding, just faster — see the live agent_behavior_settings control
         # "different kinds move differently along the same real network"
         # with one real second mode rather than a full multi-modal
         # transit sim. How many of each spawn is per-area config, see
         # `configured_agent_count`/`configured_vehicle_count`.
-        walker_count = configured_agent_count()
-        vehicle_count = configured_vehicle_count()
+        walker_count = live_settings["walker_count"]
+        vehicle_count = live_settings["vehicle_count"]
         own_agents: list[tuple[int, str]] = []  # (entity, agent_type)
         for agent_type, count in (("walker", walker_count), ("vehicle", vehicle_count)):
             for _ in range(count):
@@ -351,7 +434,7 @@ def main():
         # reason.
         published: dict[int, tuple[float, float]] = {}
 
-        def plan_route(position, graph: RoadGraph | None, known_buildings: dict[int, tuple[float, float]]) -> list[tuple[float, float]]:
+        def plan_route(position, graph: RoadGraph | None, known_buildings: dict[int, tuple[float, float]], bias: float) -> list[tuple[float, float]]:
             if graph is None or not graph.positions:
                 return [pick_wander_target()]
             start_node = graph.nearest_node(position)
@@ -374,7 +457,7 @@ def main():
                 return [pick_wander_target()]
 
             goal_node = None
-            if known_buildings and random.random() < BUILDING_DESTINATION_BIAS:
+            if known_buildings and random.random() < bias:
                 # Head toward a real building: its own nearest road node,
                 # if that node happens to be one of our reachable
                 # candidates — a real destination with a real reason to
@@ -405,6 +488,13 @@ def main():
                     current_tiers = dict(tiers)
                     current_graph = road_graph
                     current_buildings = dict(building_positions)
+                    # Read live-editable behavior settings once per tick
+                    # (rather than re-locking per agent below) -- a
+                    # setting changed mid-tick takes effect on the NEXT
+                    # tick, same granularity physics-test's own LOD
+                    # re-evaluation already has.
+                    current_bias = live_settings["building_destination_bias"]
+                    current_physics = {k: dict(v) for k, v in live_settings["agent_type_physics"].items()}
 
                 for entity in known_entities:
                     if current_tiers.get(entity) != "full":
@@ -421,7 +511,7 @@ def main():
                         route.pop(0)
 
                     if not route:
-                        route = plan_route(position, current_graph, current_buildings)
+                        route = plan_route(position, current_graph, current_buildings, current_bias)
                         routes[entity] = route
 
                     next_waypoint = route[0]
@@ -433,7 +523,7 @@ def main():
                 # gate to respect — just move each one directly toward its
                 # current waypoint, ramping speed up/down per its OWN
                 # agent_type's accel/decel/max-speed (see
-                # AGENT_TYPE_PHYSICS — this is the entire "different kinds
+                # agent_behavior_settings — this is the entire "different kinds
                 # move differently" mechanism), and publish the result.
                 # Same `plan_route` (road pathing
                 # with a building-destination bias, or wander fallback) as
@@ -447,23 +537,24 @@ def main():
                     if route and math.hypot(route[0][0] - position[0], route[0][1] - position[1]) < ARRIVAL_RADIUS:
                         route.pop(0)
                     if not route:
-                        route = plan_route(position, current_graph, current_buildings)
+                        route = plan_route(position, current_graph, current_buildings, current_bias)
                         own_routes[agent_entity] = route
 
                     target = route[0]
                     dx, dz = target[0] - position[0], target[1] - position[1]
                     distance = math.hypot(dx, dz)
 
-                    physics = AGENT_TYPE_PHYSICS[agent_type]
+                    physics = current_physics[agent_type]
                     dt = 1.0 / DECISION_HZ
                     speed = own_speeds[agent_entity]
                     # Decelerate once current speed's own stopping distance
                     # (v^2 / 2a) would carry past the waypoint, so arrival
                     # is a controlled slowdown rather than an overshoot;
                     # otherwise keep accelerating toward this agent_type's
-                    # own max speed. Both rates come straight out of
-                    # AGENT_TYPE_PHYSICS, so a walker and a vehicle visibly
-                    # speed up/slow down at genuinely different rates.
+                    # own max speed. Both rates come straight out of this
+                    # agent_type's own live agent_behavior_settings entry,
+                    # so a walker and a vehicle visibly speed up/slow down
+                    # at genuinely different (and live-tunable) rates.
                     stopping_distance = (speed * speed) / (2.0 * physics["max_decel_mps2"])
                     if distance <= stopping_distance:
                         speed = max(0.0, speed - physics["max_decel_mps2"] * dt)

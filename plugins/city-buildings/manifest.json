@@ -1,6 +1,6 @@
 {
   "type": "city-buildings",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A real, minimal building-footprint data source — the same small Klosterneuburg area city-roads covers, aligned to the same coordinate origin. Publishes one entity per real OSM building (footprint polygon, ground position, height — real where tagged, a documented estimate where not) plus a real building_attribution string. Keyless, free, ODbL OSM data only — NOT the photorealistic Google 3D Tiles/Cesium ingestion, which needs a real external account/API key decision.",
   "concepts": [
     "CityBuildings"
@@ -10,5 +10,6 @@
   "entry": "city_buildings.py",
   "handles_extensions": [],
   "ui_controls": [],
-  "package": "Sotrice City Simulator"
+  "package": "Sotrice City Simulator",
+  "singleton": true
 }

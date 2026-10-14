@@ -66,8 +66,8 @@
     },
     {
       "type": "physics-test",
-      "version": "0.1.0",
-      "description": "Physics spin skeleton -- synthetic test scene only (a handful of boxes/spheres falling and colliding), own fixed-timestep loop, uniform-grid broad-phase collision, double-precision coordinates, LOD via a stubbed active_viewpoint. Not real map data -- that's a separate, later spin.",
+      "version": "0.1.1",
+      "description": "Physics spin skeleton — synthetic test scene only (a handful of boxes/spheres falling and colliding), own fixed-timestep loop, uniform-grid broad-phase collision, double-precision coordinates, LOD via a stubbed active_viewpoint. Not real map data — that's a separate, later spin.",
       "concepts": [
         "Physics"
       ],
@@ -77,8 +77,8 @@
     },
     {
       "type": "agent-behavior-test",
-      "version": "0.2.1",
-      "description": "Agent-behavior spin skeleton -- the next layer on top of physics-test's synthetic scene. Watches physics-test's published position/physics_lod_tier per entity (no enumeration, pure subscribe-by-name). If city-roads' real OSM road network is available, pathfinds (Dijkstra) to a real destination and walks the actual route; otherwise falls back to picking a random nearby point. Publishes desired_target, which physics-test's own steering (if running) consumes -- this file has no idea whether anything is actually listening.",
+      "version": "0.3.0",
+      "description": "Agent-behavior spin skeleton — the next layer on top of physics-test's synthetic scene. Watches physics-test's published position/physics_lod_tier per entity (no enumeration, pure subscribe-by-name). If city-roads' real OSM road network is available, pathfinds (Dijkstra) to a real destination and walks the actual route; otherwise falls back to picking a random nearby point. Publishes desired_target, which physics-test's own steering (if running) consumes — this file has no idea whether anything is actually listening.",
       "concepts": [
         "AgentBehavior"
       ],
@@ -90,8 +90,8 @@
     },
     {
       "type": "city-roads",
-      "version": "0.1.0",
-      "description": "A real, minimal road-network data source -- a few real city blocks around central Klosterneuburg, Austria, extracted from OpenStreetMap. Publishes the routable node/edge graph as a bare road_network attribute for anything to consume (agent-behavior-test uses it for real pathfinding), plus a real road_attribution string (© OpenStreetMap contributors, ODbL -- real attribution is required wherever this data is displayed). Not the photorealistic-building/3D-Tiles problem -- no building geometry, just the road network.",
+      "version": "0.1.1",
+      "description": "A real, minimal road-network data source — a few real city blocks around central Klosterneuburg, Austria, extracted from OpenStreetMap (see scripts/extract_city_roads.py in the main Sotrice repo). Publishes the routable node/edge graph as a bare road_network attribute for anything to consume (agent-behavior-test uses it for real pathfinding), plus a real road_attribution string (© OpenStreetMap contributors, ODbL — real attribution is required wherever this data is displayed). Not the photorealistic-building/3D-Tiles problem — no building geometry, just the road network.",
       "concepts": [
         "CityRoads"
       ],
@@ -103,8 +103,8 @@
     },
     {
       "type": "city-buildings",
-      "version": "0.2.0",
-      "description": "A real, minimal building-footprint data source -- the same small Klosterneuburg area city-roads covers, aligned to the same coordinate origin. Publishes one entity per real OSM building (footprint polygon, ground position, height -- real where tagged, a documented estimate where not) plus a real building_attribution string. Keyless, free, ODbL OSM data only -- NOT the photorealistic Google 3D Tiles/Cesium ingestion, which needs a real external account/API key decision.",
+      "version": "0.2.1",
+      "description": "A real, minimal building-footprint data source — the same small Klosterneuburg area city-roads covers, aligned to the same coordinate origin. Publishes one entity per real OSM building (footprint polygon, ground position, height — real where tagged, a documented estimate where not) plus a real building_attribution string. Keyless, free, ODbL OSM data only — NOT the photorealistic Google 3D Tiles/Cesium ingestion, which needs a real external account/API key decision.",
       "concepts": [
         "CityBuildings"
       ],
@@ -114,8 +114,8 @@
     },
     {
       "type": "economics-test",
-      "version": "0.1.0",
-      "description": "Economics spin skeleton -- proves the wiring, not a real economic model yet. Watches city-buildings' building_position and city-roads' road_network (no enumeration, pure subscribe-by-name) and publishes back onto each building's OWN entity: building_road_distance_m/building_nearest_road_name (real, static, distance to the nearest real road node), and building_traffic_visits_count (a real counter of how often any other entity's position comes within range, with a per-mover cooldown). Has no idea whether city-roads/city-buildings/physics-test are even running.",
+      "version": "0.1.1",
+      "description": "Economics spin skeleton — proves the wiring, not a real economic model yet. Watches city-buildings' building_position/building_type/building_goods_price_eur and city-roads' road_network (no enumeration, pure subscribe-by-name) and publishes back onto each building's OWN entity: building_road_distance_m/building_nearest_road_name (real, static, distance to the nearest real road node), building_traffic_visits_count (a real counter of how often any other entity's position comes within range, with a per-mover cooldown), and building_revenue_estimate_eur (price times traffic, for buildings whose type is \"shop\" and that have a price set — the first real per-building editable-economics metric). Has no idea whether city-roads/city-buildings/physics-test are even running.",
       "concepts": [
         "Economics"
       ],
@@ -128,7 +128,7 @@
     },
     {
       "type": "rendering-test",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "description": "Rendering spin for the city simulation: a real three.js spin-ui:// viewer for physics-test's synthetic scene (subscribes to position/orientation/physics_lod_tier/shape/radius/half_extents, no enumeration, pure subscribe-by-name), with one real adaptive-fidelity mechanism (full geometry for 'full' LOD tier bodies, cheap impostors for 'kinematic' tier bodies) and its own settings panel (quality preset, DXGI-enumerated compute device choice, remote-compute stub, city area picker, Cesium ion token, grid line color). Also draws city-roads/city-buildings' real OpenStreetMap Klosterneuburg extract (real road lines, basic extruded building footprints, AI-classified wall materials) plus agent-behavior-test's own moving walker/vehicle markers. Three switchable views, each a real Core-backed render_settings.view_mode (survives reload): a vector scene, a Photorealistic mode with real Google Photorealistic 3D Tiles via CesiumJS + a user's own Cesium ion token, and a new Grid view (pure wireframe/edges-only, one configurable line color) with real drag-to-move building repositioning that regenerates affected roads live. Every building, agent, and physics body in the scene is click-selectable (a real raycast against each one's own mesh) and opens a generic property-inspector panel listing EVERY real Core attribute that entity currently has, editable in place. Includes a built-in AI analyst panel (ai-test request/response round trip) for asking real questions about the live city data (traffic, materials, road proximity) with user-toggleable context layers. Not the eventual GTA6-style adaptive renderer — no ray tracing, no temporal denoising.",
       "concepts": [
         "Rendering"
@@ -143,7 +143,7 @@
     },
     {
       "type": "transit-sim",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "Animates city-roads' synthetic underground layer: watches the published road_network for underground (layer=\"underground\") edges, groups them by transport_mode/name, and spawns one shuttle entity per line/tunnel found, ping-ponging it back and forth along that line's own node sequence forever. Publishes the same kind/agent_type shape agent-behavior-test's own vehicle agents use, plus a new vehicle_kind (\"subway_wagon\"/\"car\") rendering-test-ui uses to pick a real subway-wagon/car silhouette. Has no idea how many underground lines exist or where -- discovers everything purely from the published attribute, same as every other watch/write plugin here.",
       "concepts": [
         "TransitSim"
