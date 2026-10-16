@@ -59,10 +59,22 @@ HEAVY_COMMANDS = {"scan"}
 SEEN_SESSIONS_MAX = 32
 
 
+def registered_version(world: Any) -> Optional[str]:
+    """This spin's own version as Sotrice registered it at install time (the
+    installer doesn't unpack manifest.json next to the script, so the server's
+    registry is the one authoritative source for an installed spin)."""
+    try:
+        for plugin in world.list_plugins():
+            if plugin.get("type") == PLUGIN_TYPE and isinstance(plugin.get("version"), str):
+                return plugin["version"]
+    except Exception as exc:  # noqa: BLE001 - a version label must never stop the plugin
+        print(f"[{PLUGIN_TYPE}] couldn't read the registered version: {exc!r}", flush=True)
+    return None
+
+
 def read_version() -> str:
-    """The installed spin's version, from the manifest.json the installer
-    unpacked next to this script (or the repo's committed manifest in a dev
-    checkout)."""
+    """Fallback for a dev checkout (not installed through the registry): the
+    repo's committed manifest."""
     here = Path(__file__).resolve()
     for candidate in (here.with_name("manifest.json"), here.parents[2] / "plugins" / "spin-manifests" / f"{PLUGIN_TYPE}.json"):
         try:
@@ -289,9 +301,9 @@ def main() -> None:
     directory.mkdir(parents=True, exist_ok=True)
     store = Store(directory)
     cache = ScanCache(directory)
-    version = read_version()
     with World() as world:
         name = world.identify(PLUGIN_TYPE)
+        version = registered_version(world) or read_version()
         ai = CoreAiBridge(world, name)
         service = Service(store, cache, ai, app_version=version)
         plugin = Plugin(world, name, service, version, directory)
