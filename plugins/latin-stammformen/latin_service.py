@@ -434,7 +434,7 @@ class Service:
             return self._scan_preview(ui_rows, orig, scan)
 
         status = self.ai.status()
-        if status.get("state") not in ("ready", "starting"):
+        if status.get("state") not in ("ready", "idle"):  # idle: installed and new enough, started on demand
             raise CommandError(status.get("message") or "The AI spin isn't ready.")
 
         attachments = [{"mime_type": mime, "data_base64": cmd["data_base64"]}]
@@ -465,9 +465,11 @@ class Service:
         rows, issues, fatal = ask("simple")
         acceptable = fatal is None and L.scan_is_acceptable(rows, issues)
         escalated = False
+        escalation_reason = ""
         if not acceptable and status.get("cost_bias", "auto") == "auto":
             progress({"stage": "escalate", "message": "The first answer wasn't usable -- trying the stronger model once."})
             escalated = True
+            escalation_reason = self._why_unusable(rows, issues, fatal)
             rows2, issues2, fatal2 = ask("complex")
             if fatal2 is None and (fatal is not None or L.scan_is_acceptable(rows2, issues2) or
                                    sum(1 for i in issues2 if not L.has_errors(i)) > sum(1 for i in issues if not L.has_errors(i))):
@@ -478,11 +480,27 @@ class Service:
 
         elapsed = round(time.perf_counter() - started, 3)
         scan = {"cached": False, "requests": requests, "models": used_models, "tokens": tokens, "elapsed_s": elapsed,
-                "escalated": escalated, "image_hash": digest[:12], "low_quality": not acceptable}
+                "escalated": escalated, "escalation_reason": escalation_reason, "image_hash": digest[:12], "low_quality": not acceptable}
         if acceptable:
             self.cache.put(key, {"rows": rows, "models": used_models, "tokens": tokens})
         ui_rows, orig = self._preview_rows(rows, {"lec": 1, "cat": L.DEFAULT_CAT_SCAN}, issues_in=issues, weak=True)
         return self._scan_preview(ui_rows, orig, scan)
+
+    @staticmethod
+    def _why_unusable(rows: list[dict], issues: list[list[dict]], fatal: Optional[str]) -> str:
+        """A short, human-readable reason the first (budget model) answer was not
+        good enough -- shown next to the token numbers so a prompt that fails the
+        cheap model can be diagnosed without re-asking."""
+        if fatal:
+            return fatal
+        counts: dict[str, int] = {}
+        for row_issues in issues:
+            for i in row_issues:
+                if i["level"] == "error":
+                    counts[i["field"]] = counts.get(i["field"], 0) + 1
+        bad = sum(1 for row_issues in issues if L.has_errors(row_issues))
+        top = ", ".join(f"{f} x{n}" for f, n in sorted(counts.items(), key=lambda kv: -kv[1])[:3])
+        return f"{bad} of {len(rows)} rows had problems ({top})"
 
     def _scan_preview(self, ui_rows: list[dict], orig: list[dict], scan: dict) -> dict:
         # Everything a scan produced is AI output: the present forms in

@@ -740,18 +740,19 @@ def check_answers(verb: dict, answers: dict) -> dict:
 # Photo scan: prompt, reply parsing, token estimate
 # ---------------------------------------------------------------------------
 
-SCAN_PROMPT_VERSION = 1
+SCAN_PROMPT_VERSION = 3
 SCAN_PROMPT = (
     "Extract the Latin verbs printed on this textbook page. Reply with ONLY a JSON array, no commentary. "
     "One object per verb with the keys: "
     '"inf" (infinitive as printed), '
     '"conj" ("1","2","3","M","4","irreg","semidep" or "dep"), '
-    '"pres" (1st and 2nd person singular present, e.g. "deleo, deles"; deponents "hortor, hortaris"), '
-    '"perf" (1st person perfect as printed, e.g. "delevi"; "ausus sum" for semi-deponents), '
+    '"pres" (1st and 2nd person singular present, e.g. "amo, amas"; deponents "hortor, hortaris"), '
+    '"perf" (1st person perfect as printed, e.g. "amavi"; "ausus sum" for semi-deponents), '
     '"ppp" (perfect passive participle as printed, "---" if none), '
     '"meaning" (the German meaning as printed), '
     '"lec" (lesson number as an integer if the page shows one, else 1), '
     '"cat" (the section heading above the verb, else ""). '
+    "The present forms are usually NOT printed on the page: conjugate them yourself, and never leave any key empty. "
     "Only verbs that are on the page; do not invent any."
 )
 
