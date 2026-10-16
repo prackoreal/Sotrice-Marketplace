@@ -1,0 +1,26 @@
+{
+  "type": "latin-stammformen",
+  "version": "0.1.0",
+  "description": "Stammformen Trainer: a Latin principal-parts trainer. Flashcards (flip, swipe, keyboard), a typed self-test that is forgiving about accents, commas and spacing but strict about the forms, and a searchable list, over a vocabulary list you import yourself (the spin ships empty -- bring a backup file of this spin or a verb page you already have). Chapter groups come from the lessons in your list, with per-lesson switches, core-verb and conjugation filters, a mastered counter, your own groups, bulk paste and a photo/PDF scan that reads a printed word list through the AI spin with your own Gemini key (needs ai-test 0.1.2 or newer; the page never holds a key). Your list, progress and test history are stored in Sotrice's data folder, outside the spin, so updating or reinstalling it never touches them; export and import as JSON.",
+  "concepts": [
+    "LatinTrainer"
+  ],
+  "depends_on": [],
+  "author": "prackoreal",
+  "entry": "latin_stammformen.py",
+  "handles_extensions": [],
+  "ui_controls": [],
+  "ui": {
+    "entry": "latin-stammformen-ui/dist/index.html",
+    "modes": [
+      "fullview"
+    ],
+    "connect_src": [],
+    "joinable": false
+  },
+  "remote_permissions": {
+    "public_attrs": [],
+    "owner_only_prefixes": []
+  },
+  "singleton": true
+}
