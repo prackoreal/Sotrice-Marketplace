@@ -172,7 +172,8 @@
       "version": "0.4.9",
       "description": "A teacher runs a real math class (multiple choice, free response, multi-select, matching-pair with distractors, adaptive difficulty, streaks, an opt-in scoreboard, live mid-session editing, per-class identity, persistence across restarts) and a real student joins by code from their own device to answer live. The math-student testing bot, the 2D/3D graphing calculator, and the LaMa worksheet bank (lama-bank) are all separate, optional companions listed under \"Math companions\" below -- install any of them individually if you want them; none come bundled in by default.",
       "includes": [
-        "math-teacher"
+        "math-teacher",
+        "ai-test"
       ]
     },
     {
@@ -186,7 +187,8 @@
         "agent-behavior-test",
         "economics-test",
         "rendering-test",
-        "transit-sim"
+        "transit-sim",
+        "ai-test"
       ]
     }
   ]
