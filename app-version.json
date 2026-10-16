@@ -1,4 +1,4 @@
 {
-  "version": "0.1.24",
-  "notes": "Math classroom content now runs in its own sandboxed plugin UI (real teacher dashboard + student answer UI). A real cross-device join fix, two new question types (multi-select, matching-pair with drag-and-drop) with a real authoring UI, a 2D/3D graphing plugin, Math Plugin auto-installed by default, a real sotrice:// join link, and a LaMa PDF upload UI. Windows only this release -- macOS/Linux builds not yet re-cut for 0.1.24."
+  "version": "0.1.30",
+  "notes": "Voice editing now uses your real microphone and asks for permission first (you can revoke it in Settings > Privacy). A new glass look across the app and the spins. Math: AI answer keys, grading fixes, and teachers can review the AI's grading. No more lag when a spin sends lots of data, and spins can't start twice. Fixes for cut-off spin names in the Toolbox and Marketplace, the graphing layout and the Settings layout."
 }

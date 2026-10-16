@@ -1,15 +1,15 @@
 {
-  "version": "0.1.29",
-  "notes": "Fixes the installer's 'Error opening file for writing'. Closing Sotrice now always stops its background server, so updates install cleanly. Updated city spins: the city view shows roads and buildings again, and spins can't start twice.",
-  "pub_date": "2026-10-15T15:20:53Z",
+  "version": "0.1.30",
+  "notes": "Voice editing now uses your real microphone and asks for permission first (you can revoke it in Settings > Privacy). A new glass look across the app and the spins. Math: AI answer keys, grading fixes, and teachers can review the AI's grading. No more lag when a spin sends lots of data, and spins can't start twice. Fixes for cut-off spin names in the Toolbox and Marketplace, the graphing layout and the Settings layout.",
+  "pub_date": "2026-10-16T07:14:52Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.29/Sotrice_0.1.29_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSbjBGL2JuZmVaQjhVU0d3Z3AxeU5ySEI1bU1UUjVMRWF4TitNek5VMnd5MmRQRzA2UndFbGlyV1p3TmJJNSttN2NtYkliOGUxcHh0RWIxVUhDTEtReVp4aVVWaWFmbUF3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMDc3MTEwCWZpbGU6U290cmljZV8wLjEuMjlfeDY0LXNldHVwLmV4ZQpOa3ZmSm5FeHRsRUErRzU4bk4zY1VwN0I2VG84cERZdXRuZ3lGa0JkWnZDM2E4NUdrdHNEMEl3dG8vR1MrM25HeVRZKzVkakxUTldoaW9JaUxvMlpCUT09Cg=="
+      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.30/Sotrice_0.1.30_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSbjBGL2JuZmVaQi96M2s2bmRnT084MmxTQnA2YUVJY1Z4eTgza1JJN1p3L1M1NTUyb3QxcncvMWdjQ2ZPaVZoYTNyM1E2T2hPRGpSZzNKRUl5KzFJU2laalJVU1M5cWdjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMTM0NzkyCWZpbGU6U290cmljZV8wLjEuMzBfeDY0LXNldHVwLmV4ZQpEMjZzblR0MEFaS2xBQmFQWkUyRFJSa1NGWWFVbDlHanNnTnhuM1RRSjBBYkQwbEJWZVdNYXpBQXdPcEh3L0pmaFkzU09ucXBpYTVaZGdOUkVzMkdEZz09Cg=="
     },
     "windows-x86_64-nsis": {
-      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.29/Sotrice_0.1.29_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSbjBGL2JuZmVaQjhVU0d3Z3AxeU5ySEI1bU1UUjVMRWF4TitNek5VMnd5MmRQRzA2UndFbGlyV1p3TmJJNSttN2NtYkliOGUxcHh0RWIxVUhDTEtReVp4aVVWaWFmbUF3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMDc3MTEwCWZpbGU6U290cmljZV8wLjEuMjlfeDY0LXNldHVwLmV4ZQpOa3ZmSm5FeHRsRUErRzU4bk4zY1VwN0I2VG84cERZdXRuZ3lGa0JkWnZDM2E4NUdrdHNEMEl3dG8vR1MrM25HeVRZKzVkakxUTldoaW9JaUxvMlpCUT09Cg=="
+      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.30/Sotrice_0.1.30_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSbjBGL2JuZmVaQi96M2s2bmRnT084MmxTQnA2YUVJY1Z4eTgza1JJN1p3L1M1NTUyb3QxcncvMWdjQ2ZPaVZoYTNyM1E2T2hPRGpSZzNKRUl5KzFJU2laalJVU1M5cWdjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMTM0NzkyCWZpbGU6U290cmljZV8wLjEuMzBfeDY0LXNldHVwLmV4ZQpEMjZzblR0MEFaS2xBQmFQWkUyRFJSa1NGWWFVbDlHanNnTnhuM1RRSjBBYkQwbEJWZVdNYXpBQXdPcEh3L0pmaFkzU09ucXBpYTVaZGdOUkVzMkdEZz09Cg=="
     },
     "darwin-x86_64": {
       "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases",
