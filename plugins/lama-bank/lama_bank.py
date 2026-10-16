@@ -47,19 +47,54 @@ in its own review_reason ("AI-assisted extraction (Gemini) ...") so a
 teacher never mistakes it for the geometry parser's own high-confidence
 result.
 
+AI answer keys: after parsing, every question whose key is missing or only
+guessed (lama_parser.needs_ai_key -- in practice the "Mutiple Choice"
+exercises whose checked boxes couldn't be read, and free-response answers
+that were only guessed from the last line) gets a draft key from the AI over
+the same ai_request/ai_response mechanism as above. Built to be cheap and
+safe, because the Gemini key is rate-limited and a wrong key silently
+mis-grades students:
+  - Content first: the answer read from the PDF itself (color-coded
+    solution, checked boxes) always wins and is never sent to the AI.
+  - Batched (KEY_BATCH_SIZE exercises per request), at most KEY_CONCURRENCY
+    in flight, each with a small grayscale crop of the exercise attached
+    (ai_request.attachments, 1-2 Gemini tiles) next to the flattened text.
+  - Budget model first (task_hint "simple"); only what it declined or got
+    wrong is retried on the capable model.
+  - Every reply is validated against the question's own options (indexes in
+    range, never "everything", the count the question states) before it
+    becomes the real key; an accepted AI key also sets question["ai_answer"]
+    so math-teacher-ui shows "AI answer -- check it" with one-click accept.
+  - Cached on disk by content hash (.lama_ai_keys.json in WATCH_DIR), so a
+    rescan, a restart or the same exercise in another PDF never asks again.
+    "Unsure"/"invalid" verdicts are cached too (retry_ai_keys re-asks them).
+  - A 429 is the service saying "later", not an answer: the batch backs off
+    (shared across workers) and, if it still can't get through, its
+    questions stay PENDING -- never "unsure", never cached.
+  - No key / offline / ai-test missing: nothing breaks, questions import
+    exactly as before, and lama_ai_status carries a calm message.
+Parse results are cached per PDF content hash too (.lama_parse_cache/), and
+startup announces itself (lama_scan_status, scanning=true) BEFORE the first
+scan, which runs on its own thread.
+
 Entities published:
   A single control entity, kind="lama_bank":
     lama_catalog (list[{"id", "titel", "grundkompetenz", "klasse",
-      "quelle", "aufgabenformat", "type", "review_reason",
-      "source_pdf"}]) — METADATA ONLY, safe to browse/search/filter
+      "quelle", "aufgabenformat", "type", "review_reason", "answer_state"
+      ("pdf" | "verified" | "ai" | "guess" | "missing" -- none of them an
+      error), "source_pdf"}]) — METADATA ONLY, safe to browse/search/filter
       freely; deliberately excludes the actual question content
       (options/pairs/accepted_answers/points) so this stays a small,
       cheap-to-push list even with thousands of catalog entries. The
       full content for a chosen id is only ever read internally by this
       plugin itself, at the moment it's actually filed into a class
       (see "import_into_class" below) — never published wholesale.
+    lama_ai_status ({"state": "idle"|"ok"|"partial"|"unavailable",
+      "message": calm user-facing text, + counters wanted/keyed/verified/
+      cached/unsure/failed/skipped/pending/requests}) -- the last AI answer-
+      key pass.
     lama_skipped (list[{"titel", "grundkompetenz", "klasse", "quelle",
-      "aufgabenformat", "reason"}]) — every exercise lama_parser.py
+      "aufgabenformat", "reason", "source_pdf", "whole_pdf"}]) — every exercise lama_parser.py
       couldn't turn into any question at all, with why, so a teacher
       can see the real gaps (Lückentext, BIFIE essay content, ...)
       instead of a silently smaller catalog than they expected.
@@ -134,6 +169,9 @@ anything else that talks to sotrice-server from this machine):
         dropped in since startup, or any changed since last scan) and
         republishes lama_catalog/lama_skipped/lama_scan_status. A no-op
         if a scan is already running.
+      "retry_ai_keys" — forgets cached AI verdicts that weren't a usable key
+        (unsure/invalid) and rescans, so those questions are asked again --
+        e.g. after adding an API key. Good answers stay cached.
       "cancel_scan" — cuts short whatever scan (a "rescan" or
         "upload_pdf") is currently running, at the next exercise-level
         checkpoint (see lama_scan_progress's own doc comment) — a no-op
@@ -161,14 +199,35 @@ anything else that talks to sotrice-server from this machine):
 """
 
 import base64
+import concurrent.futures
+import hashlib
+import json
 import os
+import queue
 import threading
 import time
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
-from lama_parser import METADATA_FIELDS, AiFallback, parse_lama_pdf
+from lama_parser import (
+    METADATA_FIELDS,
+    NO_ENTRY_REASON,
+    PARSER_CACHE_VERSION,
+    AiFallback,
+    KeyOutcome,
+    ParsedQuestion,
+    ParseResult,
+    apply_key_outcome,
+    build_key_prompt,
+    initial_answer_state,
+    key_cache_id,
+    needs_ai_key,
+    parse_key_reply,
+    parse_lama_pdf,
+    render_region_png,
+)
 from sotrice_client import World
 
 # How long one AI-assisted extraction attempt waits for a real ai_response
@@ -181,6 +240,106 @@ from sotrice_client import World
 _AI_FALLBACK_TIMEOUT_S = 25.0
 
 WATCH_DIR = Path(os.environ["LAMA_PDF_DIR"]) if os.environ.get("LAMA_PDF_DIR") else Path(__file__).parent / "lama_pdfs"
+
+# AI answer-key pass (see the module docstring's "AI answer keys" section).
+# Gemini rate-limits hard under parallel load (429/503 observed live with 6
+# concurrent requests) and ai-test already retries transient failures with
+# backoff, so this stays small: a few exercises per request, two in flight.
+KEY_BATCH_SIZE = 5
+KEY_CONCURRENCY = 2
+# One batch's whole round trip, INCLUDING ai-test's own up-to-3 retries
+# with backoff on a transient 429/5xx -- generous, but bounded.
+KEY_REQUEST_TIMEOUT_S = 150.0
+# Consecutive failed batches (timeouts, transport errors, unusable replies)
+# before the pass gives up for this scan instead of burning a timeout per
+# remaining batch against a service that clearly isn't answering.
+KEY_MAX_CONSECUTIVE_FAILURES = 2
+# A 429 is the service saying "later", not a verdict on the question: wait
+# (exponentially, and for EVERY worker -- see _cooldown) and retry the same
+# batch; only after this many tries do its questions stay "pending".
+KEY_RATE_LIMIT_RETRIES = 3
+KEY_RATE_LIMIT_BASE_DELAY_S = 20.0
+# How long a scan that NEEDS AI keys waits for ai-test to announce itself
+# (ai_settings_ready) after being started -- a cold Python start.
+AI_TEST_READY_TIMEOUT_S = 20.0
+# Lives in WATCH_DIR so it follows LAMA_PDF_DIR (an isolated test points
+# that at scratch and gets an isolated cache for free) and so a teacher's
+# PDFs and their already-paid-for AI answers travel together. A dotfile,
+# not a *.pdf, so neither the PDF glob nor the recent-uploads list sees it.
+KEY_CACHE_PATH = WATCH_DIR / ".lama_ai_keys.json"
+# When THIS process started. Core keeps a dead plugin's entities and their
+# last attribute values forever, so after any restart a UI replaying
+# lama_catalog etc. sees every past instance's leftovers too -- this is
+# what lets it tell which entity is the live one (the newest). Published as
+# lama_scan_status.instance_started_at.
+INSTANCE_STARTED_AT = time.time()
+
+
+def _load_key_cache() -> dict[str, dict]:
+    try:
+        raw = json.loads(KEY_CACHE_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    entries = raw.get("entries") if isinstance(raw, dict) else None
+    return entries if isinstance(entries, dict) else {}
+
+
+def _save_key_cache(entries: dict[str, dict]) -> None:
+    try:
+        WATCH_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = KEY_CACHE_PATH.with_name(KEY_CACHE_PATH.name + ".tmp")
+        tmp.write_text(json.dumps({"version": 1, "entries": entries}, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, KEY_CACHE_PATH)
+    except OSError as exc:  # a cache that can't be written costs money next scan, never correctness now
+        print(f"[lama-bank] couldn't write the AI key cache: {exc!r}", flush=True)
+
+
+# Parsing a real LaMa PDF is slow (pdfplumber over every page: ~30s for the
+# 300-exercise Typ-1 export) and used to happen in full, for EVERY PDF in
+# the folder, on every plugin start and again after every single upload.
+# Keyed by the file's own content hash + lama_parser.PARSER_CACHE_VERSION,
+# so a re-uploaded identical file, a restart, and "upload one more PDF"
+# all skip straight past the PDFs already parsed.
+PARSE_CACHE_DIR = WATCH_DIR / ".lama_parse_cache"
+
+
+def _parse_cache_path(pdf_path: Path) -> Optional[Path]:
+    try:
+        digest = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+    return PARSE_CACHE_DIR / f"{digest}-v{PARSER_CACHE_VERSION}.json"
+
+
+def _load_cached_parse(cache_path: Optional[Path]) -> Optional[ParseResult]:
+    if cache_path is None:
+        return None
+    try:
+        return ParseResult.from_json(json.loads(cache_path.read_text(encoding="utf-8")))
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _store_parse(cache_path: Optional[Path], result: ParseResult) -> None:
+    if cache_path is None:
+        return
+    try:
+        PARSE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = cache_path.with_name(cache_path.name + ".tmp")
+        tmp.write_text(json.dumps(result.to_json(), ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, cache_path)
+    except OSError as exc:  # a missing cache entry only costs time next scan
+        print(f"[lama-bank] couldn't write the parse cache: {exc!r}", flush=True)
+
+
+@dataclass
+class AiReply:
+    """What came back from one ai-test round trip -- text on success,
+    error text from ai_response.error (or a local timeout note) on
+    failure. `model` is whichever Gemini model ai-test picked."""
+    text: Optional[str]
+    error: Optional[str]
+    model: Optional[str] = None
 
 # Same bound as math_teacher.py's own MAX_IMPORT_PER_REQUEST — see this
 # module's own docstring on why it's duplicated rather than imported.
@@ -225,10 +384,14 @@ def _new_catalog_id(source_pdf: str, index: int) -> str:
 def scan_watch_dir(
     ai_fallback: Optional[AiFallback] = None,
     on_progress: Optional[Callable[[int, int, str, int, int], bool]] = None,
-) -> tuple[dict[str, dict], list[dict], list[dict]]:
+) -> tuple[dict[str, dict], list[dict], list[dict], dict[str, ParsedQuestion]]:
     """Parses every *.pdf in WATCH_DIR. Returns (questions_by_id — the
     FULL question content, never published wholesale, see the module
-    docstring — catalog_entries, skipped_entries). `ai_fallback`, if
+    docstring — catalog_entries, skipped_entries, parsed_by_id — the
+    ParsedQuestion behind every catalog id, which is what the AI keying
+    pass reads its context from and the only place `answer_source` lives).
+    Every catalog entry starts with the answer_state a question has BEFORE
+    any AI keying (see lama_parser.initial_answer_state). `ai_fallback`, if
     given, is handed straight through to parse_lama_pdf — see its own
     doc comment for exactly when/why it's tried.
 
@@ -246,6 +409,7 @@ def scan_watch_dir(
     on_lama_command."""
     WATCH_DIR.mkdir(parents=True, exist_ok=True)
     questions_by_id: dict[str, dict] = {}
+    parsed_by_id: dict[str, ParsedQuestion] = {}
     catalog: list[dict] = []
     skipped: list[dict] = []
 
@@ -265,12 +429,34 @@ def scan_watch_dir(
                 cancelled = True
             return keep_going
 
+        cache_path = _parse_cache_path(pdf_path)
+        fallback_failed = False
+
+        def _tracked_fallback(prompt: str, _real: Optional[AiFallback] = ai_fallback) -> Optional[str]:
+            nonlocal fallback_failed
+            text = _real(prompt) if _real is not None else None
+            if text is None:
+                fallback_failed = True
+            return text
+
         try:
-            result = parse_lama_pdf(str(pdf_path), ai_fallback=ai_fallback, on_progress=_file_progress)
+            result = _load_cached_parse(cache_path)
+            if result is not None:
+                _file_progress(len(result.imported) + len(result.skipped), len(result.imported) + len(result.skipped))
+            else:
+                result = parse_lama_pdf(
+                    str(pdf_path), ai_fallback=_tracked_fallback if ai_fallback is not None else None, on_progress=_file_progress,
+                )
+                # Never cache a partial (cancelled) parse, nor one where an
+                # AI-fallback call FAILED (an outage would otherwise freeze
+                # "couldn't extract this exercise" in for good).
+                if not cancelled and not fallback_failed:
+                    _store_parse(cache_path, result)
         except Exception as exc:  # noqa: BLE001 - one bad/corrupt PDF must not take the whole scan down
             skipped.append({
                 "titel": pdf_path.name, "grundkompetenz": "", "klasse": "", "quelle": "",
                 "aufgabenformat": "", "reason": f"failed to parse this PDF at all: {exc!r}",
+                "source_pdf": pdf_path.name, "whole_pdf": True,
             })
             _file_progress(0, 0)
             if cancelled:
@@ -282,6 +468,7 @@ def scan_watch_dir(
                 break
             catalog_id = _new_catalog_id(pdf_path.name, i)
             questions_by_id[catalog_id] = parsed.question
+            parsed_by_id[catalog_id] = parsed
             catalog.append({
                 "id": catalog_id,
                 "titel": parsed.source.get("Titel", ""),
@@ -291,6 +478,7 @@ def scan_watch_dir(
                 "aufgabenformat": parsed.source.get("Aufgabenformat", ""),
                 "type": parsed.question["type"],
                 "review_reason": parsed.review_reason,
+                "answer_state": initial_answer_state(parsed),
                 "source_pdf": pdf_path.name,
             })
 
@@ -302,12 +490,13 @@ def scan_watch_dir(
                 "quelle": sk.source.get("Quelle", ""),
                 "aufgabenformat": sk.source.get("Aufgabenformat", ""),
                 "reason": sk.reason,
+                "source_pdf": pdf_path.name, "whole_pdf": False,
             })
 
         if cancelled:
             break
 
-    return questions_by_id, catalog, skipped
+    return questions_by_id, catalog, skipped, parsed_by_id
 
 
 with World() as world:
@@ -318,19 +507,26 @@ with World() as world:
 
     questions_by_id: dict[str, dict] = {}
 
-    # AI-assisted parsing fallback (see lama_parser.py's own parse_lama_pdf
-    # doc comment) -- a second, later caller of the exact same domain-
-    # agnostic ai_request/ai_response mechanism math-teacher-ui's AI tab
-    # uses (see plugins/registry.json's "ai-test" entry and
-    # clients/python/ai_test.py); this plugin has no idea HOW ai-test
-    # answers, only that it does. One dedicated entity, reused across
-    # calls -- safe because scan_watch_dir() calls ai_fallback()
-    # synchronously, one exercise at a time, so there's never more than
-    # one outstanding request at once (see _AI_FALLBACK_TIMEOUT_S's own
-    # comment on why that's an acceptable tradeoff for now).
-    ai_bridge_entity = world.create_entity()
+    # The ai_request/ai_response round trip to ai-test (see ai_test.py and
+    # plugins/registry.json's "ai-test" entry) -- a second, later caller of
+    # the exact same domain-agnostic mechanism math-teacher-ui's AI tab
+    # and city_buildings.py already use; this plugin has no idea HOW
+    # ai-test answers, only that it does. Two callers live here:
+    #   - ai_fallback(): lama_parser's "geometry failed, ask the AI to
+    #     extract this exercise" -- serial, one exercise at a time.
+    #   - the answer-key pass (see key_pass below) -- a few batches in
+    #     flight at once.
+    # Concurrency means one shared request entity won't do: two near-
+    # simultaneous writes of the same attribute on the same entity can
+    # coalesce on the wire, so each in-flight request leases its OWN
+    # entity from a small pool and matches its reply by a fresh
+    # request_id.
+    _AI_BRIDGE_POOL_SIZE = KEY_CONCURRENCY + 1
+    _ai_bridge_pool: "queue.Queue[int]" = queue.Queue()
+    for _ in range(_AI_BRIDGE_POOL_SIZE):
+        _ai_bridge_pool.put(world.create_entity())
     _ai_pending: dict[str, threading.Event] = {}
-    _ai_replies: dict[str, Optional[str]] = {}
+    _ai_replies: dict[str, AiReply] = {}
     _ai_lock = threading.Lock()
 
     def _on_ai_response(entity, attribute, value, source):
@@ -343,47 +539,373 @@ with World() as world:
             event = _ai_pending.get(request_id)
             if event is None:
                 return  # not one of ours, or already timed out and cleaned up
-            _ai_replies[request_id] = value.get("text")
+            text, error, model = value.get("text"), value.get("error"), value.get("model")
+            _ai_replies[request_id] = AiReply(
+                text=text if isinstance(text, str) else None,
+                error=error if isinstance(error, str) else None,
+                model=model if isinstance(model, str) else None,
+            )
         event.set()
 
     world.subscribe("ai_response", _on_ai_response, replay=False)
 
-    def _ensure_ai_test_running() -> None:
+    # ai-test announces itself with a bare ai_settings_ready the moment its
+    # own startup is done (see ai_test.py's main()) -- replay=True so this
+    # also fires for an instance that was already running.
+    _ai_test_ready = threading.Event()
+    world.subscribe("ai_settings_ready", lambda entity, attribute, value, source: _ai_test_ready.set(), replay=True)
+
+    def _ensure_ai_test_running() -> bool:
+        """True if an ai-test instance is running (or was just started).
+        False only if it can't be (not installed, no way to ask) -- the
+        caller then treats AI as unavailable instead of waiting out a
+        request timeout against a process that will never answer."""
         try:
             running = world.list_running()
         except Exception as exc:  # noqa: BLE001 - a query failure must not block a scan over a nice-to-have
             print(f"[{name}] couldn't check for a running ai-test instance: {exc!r}")
-            return
+            return False
         if any(r.get("plugin_type") == "ai-test" for r in running):
-            return
+            return True
         try:
             world.start_plugin("ai-test")
-        except Exception as exc:  # noqa: BLE001 - AI fallback is optional; its absence just means fewer recovered exercises
+        except Exception as exc:  # noqa: BLE001 - AI is optional; its absence just means fewer recovered exercises/keys
             print(f"[{name}] couldn't start ai-test for AI-assisted parsing: {exc!r}")
+            return False
+        return True
 
-    def ai_fallback(prompt: str) -> Optional[str]:
+    def ai_request(prompt: str, timeout_s: float, extra: Optional[dict[str, Any]] = None) -> AiReply:
+        entity = _ai_bridge_pool.get()
         request_id = str(uuid.uuid4())
         event = threading.Event()
-        with _ai_lock:
-            _ai_pending[request_id] = event
-        world.set_attribute(ai_bridge_entity, "ai_request", {"prompt": prompt, "request_id": request_id})
-        got_reply = event.wait(_AI_FALLBACK_TIMEOUT_S)
-        with _ai_lock:
-            _ai_pending.pop(request_id, None)
-            text = _ai_replies.pop(request_id, None)
-        if not got_reply:
-            print(f"[{name}] AI fallback timed out after {_AI_FALLBACK_TIMEOUT_S}s")
-            return None
-        return text
+        try:
+            with _ai_lock:
+                _ai_pending[request_id] = event
+            world.set_attribute(entity, "ai_request", {"prompt": prompt, "request_id": request_id, **(extra or {})})
+            got_reply = event.wait(timeout_s)
+            with _ai_lock:
+                _ai_pending.pop(request_id, None)
+                reply = _ai_replies.pop(request_id, None)
+        finally:
+            _ai_bridge_pool.put(entity)
+        if not got_reply or reply is None:
+            return AiReply(text=None, error=f"no answer from the AI within {timeout_s:.0f}s")
+        return reply
 
-    # Guards against two scans running at once -- both a cheap correctness
-    # measure (ai_fallback's own dedicated bridge entity assumes exactly
-    # one outstanding request at a time, see its own comment) and what
-    # makes _run_scan_async's "already running? no-op" check meaningful.
+    def ai_fallback(prompt: str) -> Optional[str]:
+        # Shares the key pass's rate-limit cooldown: while Gemini is saying
+        # "slow down", asking again per failed exercise (each ai-test call
+        # already retries 3x internally) only digs the hole deeper.
+        if time.time() < _cooldown["until"]:
+            return None
+        reply = ai_request(prompt, _AI_FALLBACK_TIMEOUT_S)
+        if reply.error:
+            print(f"[{name}] AI fallback failed: {reply.error}")
+            if _is_rate_limited(reply.error):
+                _cooldown["until"] = time.time() + KEY_RATE_LIMIT_BASE_DELAY_S
+        return reply.text
+
+    # ---- AI answer keys -------------------------------------------------
+    # See the module docstring's "AI answer keys" section for the why;
+    # this is the how. Runs AFTER parsing, over every question whose key
+    # is missing or only guessed (lama_parser.needs_ai_key), and mutates
+    # those questions + their catalog entries in place: a validated AI
+    # answer becomes the question's real key plus an ai_answer marker,
+    # anything else leaves the question exactly as parsing produced it.
+
+    # Failure reasons that mean "nothing further in this pass can succeed"
+    # -- stop at once instead of burning a request per remaining batch.
+    _FATAL_AI_ERRORS = (
+        ("no gemini api key", "no_key"),
+        ("api key not valid", "bad_key"),
+        ("api_key_invalid", "bad_key"),
+        ("permission_denied", "bad_key"),
+    )
+
+    def _classify_ai_error(error: str) -> str:
+        low = error.lower()
+        for needle, reason in _FATAL_AI_ERRORS:
+            if needle in low:
+                return reason
+        return "unreachable" if "no answer from the ai" in low or "urlopen" in low or "timed out" in low else "error"
+
+    def _ai_status(state: str, message: str, stats: dict[str, int]) -> dict[str, Any]:
+        return {"state": state, "message": message, **stats}
+
+    def _status_for(stats: dict[str, int], fatal: Optional[str], cancelled: bool) -> dict[str, Any]:
+        wanted, resolved = stats["wanted"], stats["keyed"] + stats["verified"]
+        waiting = stats["unsure"] + stats["failed"] + stats["skipped"] + stats["pending"]
+        if wanted == 0:
+            return _ai_status("idle", "", stats)
+        if fatal == "no_key":
+            return _ai_status(
+                "unavailable",
+                f"{waiting} question{'s' if waiting != 1 else ''} can't get an AI answer key yet: no Gemini API key is set up. "
+                "Add one in the AI settings, then rescan -- until then they import without an answer key (you can still set it by hand).",
+                stats,
+            )
+        if fatal == "bad_key":
+            return _ai_status("unavailable", "The Gemini API key was rejected, so AI answer keys are off. Check the key in the AI settings, then rescan.", stats)
+        if fatal in ("unreachable", "error"):
+            return _ai_status(
+                "unavailable",
+                f"Couldn't reach the AI service just now, so {waiting} question{'s' if waiting != 1 else ''} are waiting for an answer key. Rescan to try again.",
+                stats,
+            )
+        if fatal == "rate_limited" or stats["pending"]:
+            return _ai_status(
+                "partial",
+                f"The AI service is busy right now (rate limit): AI drafted keys for {resolved} of {wanted} questions and "
+                f"{stats['pending']} are still pending. Nothing is lost -- they're asked again on the next rescan.",
+                stats,
+            )
+        if cancelled:
+            return _ai_status("partial", f"Stopped early: AI drafted keys for {resolved} of {wanted}; the rest are waiting for an answer key.", stats)
+        if stats["failed"] or stats["unsure"] or stats["skipped"] or stats["pending"]:
+            return _ai_status(
+                "partial",
+                f"AI drafted answer keys for {resolved} of {wanted} questions. The other {waiting} weren't clear enough to answer "
+                "(often they need a diagram) and are waiting for an answer key.",
+                stats,
+            )
+        return _ai_status("ok", f"AI drafted answer keys for {resolved} question{'s' if resolved != 1 else ''}. Look them over before class -- they're marked \"AI answer\".", stats)
+
+    def _publish_keying_progress(done: int, total: int) -> None:
+        world.set_attribute(control, "lama_scan_progress", {
+            "phase": "keying", "file_index": 1, "file_total": 1, "filename": "",
+            "exercise_done": done, "exercise_total": total,
+        })
+
+    def _is_rate_limited(error: Optional[str]) -> bool:
+        low = (error or "").lower()
+        return "429" in low or "too many requests" in low or "resource_exhausted" in low or "rate limit" in low
+
+    # Shared "Gemini told us to slow down" deadline: when ONE batch hits a
+    # 429, every worker waits it out instead of hammering the same wall.
+    _cooldown = {"until": 0.0}
+    _render_lock = threading.Lock()  # pdfplumber documents aren't thread-safe
+
+    def key_pass(parsed_by_id: dict[str, ParsedQuestion], catalog: list[dict]) -> dict[str, Any]:
+        catalog_by_id = {c["id"]: c for c in catalog}
+        wanted = [(cid, pq) for cid, pq in parsed_by_id.items() if needs_ai_key(pq)]
+        stats = {"wanted": len(wanted), "keyed": 0, "verified": 0, "cached": 0, "unsure": 0, "failed": 0, "skipped": 0, "pending": 0, "requests": 0}
+        if not wanted:
+            return _status_for(stats, None, False)
+
+        cache = _load_key_cache()
+
+        def settle(cid: str, pq: ParsedQuestion, status: str, outcome, model: Optional[str]) -> None:
+            state = apply_key_outcome(pq, outcome, model)
+            catalog_by_id[cid]["answer_state"] = state
+            if status == "ok":
+                stats["verified" if state == "verified" else "keyed"] += 1
+            elif status == "unsure":
+                stats["unsure"] += 1
+            else:
+                stats["failed"] += 1
+
+        # Identical exercises (same content hash -- the same question in
+        # two PDFs, or repeated within one) are asked ONCE and the answer
+        # applied to every copy.
+        groups: dict[str, list[tuple[str, ParsedQuestion]]] = {}
+        for cid, pq in wanted:
+            cache_id = key_cache_id(pq)
+            hit = cache.get(cache_id)
+            if isinstance(hit, dict) and hit.get("status") in ("ok", "unsure", "invalid"):
+                outcome = KeyOutcome(
+                    hit["status"], correct_indices=hit.get("correct_indices"), answer=hit.get("answer"),
+                    rationale=hit.get("rationale") or "", reason=hit.get("reason") or "",
+                )
+                stats["cached"] += 1
+                settle(cid, pq, hit["status"], outcome, hit.get("model"))
+            else:
+                groups.setdefault(cache_id, []).append((cid, pq))
+        if not groups:
+            return _status_for(stats, None, _cancel_event.is_set())
+
+        fatal: Optional[str] = None
+        if not _ensure_ai_test_running() or not _ai_test_ready.wait(AI_TEST_READY_TIMEOUT_S):
+            stats["skipped"] = sum(len(g) for g in groups.values())
+            print(f"[{name}] ai-test isn't available -- {stats['skipped']} question(s) stay without an AI key", flush=True)
+            return _status_for(stats, "unreachable", False)
+
+        open_pdfs: dict[str, Any] = {}
+
+        def image_for(cid: str, pq: ParsedQuestion) -> Optional[str]:
+            region = (pq.ai_context or {}).get("region")
+            if not region:
+                return None
+            pdf_name = cid.rsplit(":", 1)[0]
+            with _render_lock:
+                if pdf_name not in open_pdfs:
+                    try:
+                        import pdfplumber
+                        open_pdfs[pdf_name] = pdfplumber.open(WATCH_DIR / pdf_name)
+                    except Exception:  # noqa: BLE001 - no picture, text-only
+                        open_pdfs[pdf_name] = None
+                pdf = open_pdfs[pdf_name]
+                png = render_region_png(pdf, region) if pdf is not None else None
+            return base64.b64encode(png).decode("ascii") if png else None
+
+        accounted: set[str] = set()  # cache ids already counted as pending/failed
+        recorded: set[str] = set()  # cache ids whose verdict is already applied + saved
+        gave_up = threading.Event()  # set once ANY batch exhausts its rate-limit patience: the rest stop at once
+
+        def run_batch(batch, task_hint: str):
+            """batch: [(cache_id, [(cid, pq), ...])]. Always returns (batch,
+            outcomes | None, model, error | None, rate_limited) -- never
+            raises. A 429 is waited out and retried here (a rate limit says
+            nothing about the QUESTION, so it must never become "unsure")."""
+            try:
+                items, attachments = [], []
+                for cache_id, members in batch:
+                    cid, pq = members[0]
+                    item = {"id": cache_id, "type": pq.question["type"], "text": pq.question["text"],
+                            "options": pq.question.get("options"), "context": pq.ai_context}
+                    b64 = image_for(cid, pq)
+                    if b64:
+                        attachments.append({"mime_type": "image/png", "data_base64": b64})
+                        item["image_index"] = len(attachments)
+                    items.append(item)
+                prompt = build_key_prompt(items)
+                reply = None
+                for attempt in range(KEY_RATE_LIMIT_RETRIES + 1):
+                    if gave_up.is_set():
+                        return batch, None, None, "rate limited", True
+                    wait = _cooldown["until"] - time.time()
+                    if wait > 0 and _cancel_event.wait(wait):
+                        return batch, None, None, "cancelled", False
+                    payload_extra = {"task_hint": task_hint}
+                    if attachments:
+                        payload_extra["attachments"] = attachments
+                    stats["requests"] += 1
+                    reply = ai_request(prompt, KEY_REQUEST_TIMEOUT_S, extra=payload_extra)
+                    if not _is_rate_limited(reply.error):
+                        break
+                    delay = KEY_RATE_LIMIT_BASE_DELAY_S * (2 ** attempt)
+                    _cooldown["until"] = max(_cooldown["until"], time.time() + delay)
+                    print(f"[{name}] AI rate-limited (attempt {attempt + 1}); backing off {delay:.0f}s", flush=True)
+                if reply is None or _is_rate_limited(reply.error):
+                    gave_up.set()
+                    return batch, None, None, reply.error if reply else "rate limited", True
+                if reply.error or reply.text is None:
+                    return batch, None, reply.model, reply.error or "empty reply", False
+                return batch, parse_key_reply(reply.text, items), reply.model, None, False
+            except Exception as exc:  # noqa: BLE001
+                return batch, None, None, repr(exc), False
+
+        def run_round(units, task_hint: str):
+            """Asks every unit once at `task_hint`'s model tier. Returns
+            ({cache_id: (outcome, model)}, units_left_pending)."""
+            nonlocal fatal
+            results: dict[str, tuple[KeyOutcome, Optional[str]]] = {}
+            batches = [units[i:i + KEY_BATCH_SIZE] for i in range(0, len(units), KEY_BATCH_SIZE)]
+            failures = 0
+            left: list = []
+            with concurrent.futures.ThreadPoolExecutor(max_workers=KEY_CONCURRENCY) as pool:
+                pending = {pool.submit(run_batch, b, task_hint) for b in batches}
+                while pending:
+                    finished, pending = concurrent.futures.wait(pending, return_when=concurrent.futures.FIRST_COMPLETED)
+                    for fut in finished:
+                        if fut.cancelled():
+                            continue
+                        batch, outcomes, model, error, rate_limited = fut.result()
+                        if rate_limited:
+                            # Out of patience for NOW: leave these pending
+                            # (never cached, never "unsure") and stop asking.
+                            left.extend(batch)
+                            accounted.update(cid_ for cid_, _m in batch)
+                            stats["pending"] += sum(len(m) for _, m in batch)
+                            fatal = fatal or "rate_limited"
+                        elif outcomes is None or all(o.reason == NO_ENTRY_REASON for o in outcomes.values()):
+                            failures += 1
+                            left.extend(batch)
+                            reason = _classify_ai_error(error) if error else "error"
+                            print(f"[{name}] AI key batch failed ({reason}): {error or 'unusable reply'}", flush=True)
+                            if reason in ("no_key", "bad_key"):
+                                fatal = reason
+                            elif failures >= KEY_MAX_CONSECUTIVE_FAILURES:
+                                fatal = reason
+                            accounted.update(cid_ for cid_, _m in batch)
+                            stats["failed"] += sum(len(m) for _, m in batch)
+                        else:
+                            failures = 0
+                            for cache_id, _members in batch:
+                                results[cache_id] = (outcomes[cache_id], model)
+                                if outcomes[cache_id].status == "ok":
+                                    # A usable key is paid for -- apply and save it NOW, not at
+                                    # the end of the pass, so a cancel/crash/rate limit later
+                                    # never throws away answers that already cost tokens.
+                                    record(cache_id, outcomes[cache_id], model)
+                            _save_key_cache(cache)
+                        _publish_keying_progress(len(results), len(units))
+                    if fatal is not None or _cancel_event.is_set():
+                        for fut in pending:
+                            fut.cancel()
+                        break
+            return results, left
+
+        def record(cache_id: str, outcome: KeyOutcome, model: Optional[str]) -> None:
+            if cache_id in recorded:
+                return
+            recorded.add(cache_id)
+            cache[cache_id] = {
+                "status": outcome.status, "correct_indices": outcome.correct_indices, "answer": outcome.answer,
+                "rationale": outcome.rationale, "reason": outcome.reason, "model": model, "at": time.time(),
+            }
+            for cid, pq in groups[cache_id]:
+                settle(cid, pq, outcome.status, outcome, model)
+
+        units = list(groups.items())
+        _publish_keying_progress(0, len(units))
+        # Round 1: the budget model. Round 2: ONLY what round 1 declined or
+        # got wrong gets the capable (pricier) model -- most exercises never
+        # reach it.
+        first, left = run_round(units, "simple")
+        undecided = [(cid_, groups[cid_]) for cid_, (o, _m) in first.items() if o.status != "ok"]
+        decided = {cid_: v for cid_, v in first.items() if v[0].status == "ok"}
+        if undecided and fatal is None and not _cancel_event.is_set():
+            second, left2 = run_round(undecided, "complex")
+            decided.update(second)
+            for cid_, (o, m) in first.items():
+                if cid_ not in second and cid_ not in decided:
+                    decided[cid_] = (o, m)  # escalation never answered -- keep round 1's verdict
+            left = left + left2
+        else:
+            for cid_, v in first.items():
+                decided.setdefault(cid_, v)
+        for cache_id, (outcome, model) in decided.items():
+            record(cache_id, outcome, model)
+        _save_key_cache(cache)
+
+        for pdf in open_pdfs.values():
+            try:
+                if pdf is not None:
+                    pdf.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+        settled_ids = set(decided)
+        # Anything neither answered nor failed outright is simply not
+        # decided yet: pending after a rate limit, "not attempted" if the
+        # pass stopped early. No verdict, so no cache entry -- a rescan asks.
+        for cache_id, members in groups.items():
+            if cache_id not in settled_ids and cache_id not in accounted:
+                stats["skipped"] += len(members)
+        print(
+            f"[{name}] AI answer keys: {stats['keyed']} drafted, {stats['verified']} verified, {stats['cached']} from cache, "
+            f"{stats['unsure']} unsure, {stats['failed']} failed, {stats['pending']} pending (rate limit), "
+            f"{stats['skipped']} not attempted, {stats['requests']} request(s)",
+            flush=True,
+        )
+        return _status_for(stats, fatal, _cancel_event.is_set())
+
+    # Guards against two scans running at once -- what makes
+    # _run_scan_async's "already running? no-op" check meaningful.
     # _cancel_event is checked inside _on_scan_progress, which
     # scan_watch_dir/parse_lama_pdf both poll once per exercise — see
     # their own doc comments on why that's the real cancellation
-    # checkpoint, not just a between-files one.
+    # checkpoint, not just a between-files one — and between key batches.
     _scan_lock = threading.Lock()
     _cancel_event = threading.Event()
 
@@ -396,6 +918,7 @@ with World() as world:
         # lamaState.ts), so there's no separate "done" flag published
         # here.
         world.set_attribute(control, "lama_scan_progress", {
+            "phase": "parsing",
             "file_index": file_index, "file_total": file_total, "filename": filename,
             "exercise_done": exercise_done, "exercise_total": exercise_total,
         })
@@ -404,16 +927,25 @@ with World() as world:
     def publish_catalog() -> tuple[list[dict], list[dict]]:
         global questions_by_id
         _ensure_ai_test_running()
-        questions_by_id, catalog, skipped = scan_watch_dir(ai_fallback=ai_fallback, on_progress=_on_scan_progress)
+        scanned_questions, catalog, skipped, parsed_by_id = scan_watch_dir(ai_fallback=ai_fallback, on_progress=_on_scan_progress)
+        ai_status = key_pass(parsed_by_id, catalog)
+        # Swapped in only now, once keying has finished mutating these
+        # question dicts, so an import_into_class that lands mid-scan
+        # still reads the previous, consistent snapshot (the one the UI
+        # is still showing) instead of half-keyed content.
+        questions_by_id = scanned_questions
         world.set_many([
             (control, "lama_catalog", catalog),
             (control, "lama_skipped", skipped),
+            (control, "lama_ai_status", ai_status),
             (control, "lama_scan_status", {
                 "pdf_count": len(list(WATCH_DIR.glob("*.pdf"))),
                 "imported_count": len(catalog),
                 "skipped_count": len(skipped),
                 "scanned_at": time.time(),
                 "cancelled": _cancel_event.is_set(),
+                "scanning": False,
+                "instance_started_at": INSTANCE_STARTED_AT,
             }),
             (control, "lama_recent_uploads", _recent_uploads()),
         ])
@@ -454,25 +986,50 @@ with World() as world:
         finishes, not the whole watch folder's results."""
         def _report(catalog: list, skipped: list) -> None:
             imported = [c for c in catalog if c["source_pdf"] == safe_name]
-            failed = [s for s in skipped if s["titel"] == safe_name]
-            if not imported and not failed:
-                # The file wrote (or already existed) and re-scanned fine,
-                # but this exact PDF produced nothing at all either way --
-                # still a real result worth reporting, not silence.
+            skipped_here = [x for x in skipped if x.get("source_pdf") == safe_name]
+            whole_pdf_failures = [x for x in skipped_here if x.get("whole_pdf")]
+            if whole_pdf_failures:
+                # The PDF itself couldn't be read at all -- a real failure,
+                # not "0 exercises parsed, 1 skipped".
                 world.set_attribute(control, "lama_upload_result", {
-                    "filename": safe_name, "ok": False, "error": "parsed, but found no exercises in this PDF at all",
+                    "filename": safe_name, "ok": False, "error": whole_pdf_failures[0]["reason"],
+                })
+            elif not imported:
+                # The file wrote (or already existed) and re-scanned fine,
+                # but this exact PDF produced no importable exercise --
+                # still a real result worth reporting, not silence.
+                detail = f" ({len(skipped_here)} skipped: {skipped_here[0]['reason']})" if skipped_here else ""
+                world.set_attribute(control, "lama_upload_result", {
+                    "filename": safe_name, "ok": False, "error": "parsed, but found no importable exercises in this PDF" + detail,
                 })
             else:
                 world.set_attribute(control, "lama_upload_result", {
                     "filename": safe_name,
                     "ok": True,
                     "imported_count": len(imported),
-                    "skipped_count": len(failed),
+                    "skipped_count": len(skipped_here),
                 })
-            print(f"[{name}] scanned {safe_name!r}: {len(imported)} importable, {len(failed)} skipped", flush=True)
+            print(f"[{name}] scanned {safe_name!r}: {len(imported)} importable, {len(skipped_here)} skipped", flush=True)
         return _report
 
-    publish_catalog()
+    # Announce BEFORE scanning anything: the UI's start-up wait (lamaState.ts)
+    # gives up after a few seconds if lama_scan_status hasn't arrived, and a
+    # real watch folder (a 300-exercise Typ-1 export alone is ~30s to parse
+    # cold) used to keep this plugin silent -- and deaf to lama_command --
+    # for that whole time, which the UI reported as "LaMa plugin didn't
+    # start in time". The first scan now runs on its own thread, right
+    # after the command subscription below is live.
+    world.set_many([
+        (control, "lama_catalog", []),
+        (control, "lama_skipped", []),
+        (control, "lama_ai_status", _status_for({"wanted": 0, "keyed": 0, "verified": 0, "cached": 0, "unsure": 0, "failed": 0, "skipped": 0, "pending": 0, "requests": 0}, None, False)),
+        (control, "lama_scan_status", {
+            "pdf_count": len(list(WATCH_DIR.glob("*.pdf"))),
+            "imported_count": 0, "skipped_count": 0, "scanned_at": None, "cancelled": False, "scanning": True,
+            "instance_started_at": INSTANCE_STARTED_AT,
+        }),
+        (control, "lama_recent_uploads", _recent_uploads()),
+    ])
 
     # Discovers every currently RUNNING math-teacher class the same way
     # math_student.py already does (see the module docstring's "Reads"
@@ -537,6 +1094,20 @@ with World() as world:
         elif cmd == "cancel_scan":
             _cancel_event.set()
 
+        elif cmd == "retry_ai_keys":
+            # Forgets every cached AI verdict that ISN'T a usable key
+            # ("unsure"/"invalid" -- a declined or failed answer is cached
+            # on purpose, so a plain rescan doesn't re-pay for it) and
+            # rescans, so those exercises get asked again -- e.g. after
+            # the teacher added an API key. Good answers stay cached.
+            if _scan_lock.locked():
+                return
+            cache = _load_key_cache()
+            kept = {k: v for k, v in cache.items() if isinstance(v, dict) and v.get("status") == "ok"}
+            if len(kept) != len(cache):
+                _save_key_cache(kept)
+            _run_scan_async()
+
         elif cmd == "import_into_class":
             class_code = value.get("class_code")
             question_ids = value.get("question_ids")
@@ -565,6 +1136,7 @@ with World() as world:
         # command handlers.
 
     world.subscribe("lama_command", on_lama_command, replay=False)
+    _run_scan_async()  # the first scan -- see the startup announcement above
 
     print(f"[{name}] watching {WATCH_DIR} for LaMa PDFs (set LAMA_PDF_DIR to point elsewhere)", flush=True)
     try:

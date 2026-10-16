@@ -24,16 +24,18 @@ answer marking. Used throughout below as the primary signal, with the
 original position-based heuristic kept as a fallback for whatever this
 color convention doesn't cover.
 
-- A LaMA "Mutiple Choice" (their own spelling) question never marks
-  which option(s) are correct ANYWHERE in the PDF — no red text, no
-  checkbox glyph (checked: every embedded image on an options page
-  turned out to be a hairline fraction-bar/exponent rendering artifact,
-  not a checkbox). LaMA assumes a human grades these by eye. So:
-  imported as multi_select with `correct_indices: None` (ungraded,
-  exactly the state math_teacher.py already has for "a teacher hasn't
-  decided a right answer yet") — this still saves retyping the whole
-  question and every option, the teacher only needs to tick the correct
-  box(es) afterward.
+- A LaMA "Mutiple Choice" (their own spelling) exercise is a table, one
+  row per option. In a SOLVED export the correct rows carry a checked box
+  in a narrow right-hand column -- but not as text, and not as a vector
+  shape pdfminer reports: the table borders are 1px embedded images and
+  the box only exists in the RENDERED page. (An earlier version of this
+  docstring claimed the marking was unrecoverable, after checking only the
+  embedded images.) read_choice_table() reads it the way a person does:
+  rows from the table borders, ticks by rendering each checkbox cell. When
+  that can't be read with confidence (no table, a table split across
+  pages, nothing/everything ticked, a count that contradicts "die
+  beiden"), the question imports with correct_indices None and
+  lama_bank.py asks the AI for a draft key instead (see needs_ai_key).
 - A LaMA Zuordnungsformat (matching) table CAN have more right-side
   options than left-side terms — real distractors, never correct for
   anything, and confirmed (per Laszlo's own direct call) as a real
@@ -152,6 +154,9 @@ class Word:
     top: float
     bottom: float
     red: bool  # see _is_red() above — True for LaMA's own solution/correct-answer-colored text
+    size: float = 12.0  # font size in pt — what tells a superscript/subscript from base-line text, see _layout_text()
+    page: int = 0  # 0-based page index -- where to find this word again when rendering an exercise as an image
+    x1: float = 0.0  # right edge — lets _layout_text() tell a root index sitting over a radical from an ordinary exponent after it
 
 
 @dataclass
@@ -160,11 +165,32 @@ class RawExercise:
     meta: dict[str, str]
 
 
+# Where a parsed question's ANSWER KEY (not its text) came from -- what
+# decides whether it needs an AI-drafted key (see needs_ai_key) and how the
+# catalog labels it. Deliberately separate from review_reason, which is
+# free-form prose for a human: the catalog used to render ANY non-empty
+# review_reason as a red "Needs review", and since every question has one
+# (even a clean numeric answer read straight from LaMa's own solution
+# colour), every row was red.
+ANSWER_PDF = "pdf"  # read from LaMa's own color-coded solution/answer marking -- trusted as-is
+ANSWER_GUESS = "pdf_guess"  # free_response only: no color marking, the last short line was GUESSED to be the answer
+ANSWER_AI_EXTRACT = "ai_extract"  # the whole structure (pairs/answer) was recovered by the AI fallback, not geometry
+ANSWER_NONE = "none"  # no answer key at all (every LaMa "Mutiple Choice") -- imports ungraded unless an AI key is added later
+
+
 @dataclass
 class ParsedQuestion:
     question: dict[str, Any]  # ready for import_questions' own "questions" list item shape
     review_reason: str
     source: dict[str, str]  # Titel/Grundkompetenz(en)/Klasse/Quelle, for the teacher's own reference
+    answer_source: str = ANSWER_PDF  # see ANSWER_* above
+    # What an LLM needs to DRAFT an answer key for this question, only
+    # filled in when answer_source says one is wanted (see needs_ai_key):
+    # {"question": layout text of the problem statement, "options":
+    # per-option layout text (multi_select) | None, "current_answer": the
+    # guessed answer (ANSWER_GUESS) | None}. Layout text, not the plain
+    # question text -- see _layout_text on why they differ.
+    ai_context: Optional[dict[str, Any]] = None
 
 
 @dataclass
@@ -173,10 +199,42 @@ class SkippedExercise:
     source: dict[str, str]
 
 
+# Bump whenever parse_lama_pdf's OUTPUT for the same PDF changes (new
+# fields, better extraction, a fixed bug) -- lama_bank.py's on-disk parse
+# cache is keyed by it, so a stale cached parse never outlives the code
+# that would now produce something different.
+PARSER_CACHE_VERSION = 7
+
+
 @dataclass
 class ParseResult:
     imported: list[ParsedQuestion] = field(default_factory=list)
     skipped: list[SkippedExercise] = field(default_factory=list)
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "imported": [
+                {
+                    "question": pq.question, "review_reason": pq.review_reason, "source": pq.source,
+                    "answer_source": pq.answer_source, "ai_context": pq.ai_context,
+                }
+                for pq in self.imported
+            ],
+            "skipped": [{"reason": sk.reason, "source": sk.source} for sk in self.skipped],
+        }
+
+    @classmethod
+    def from_json(cls, data: dict[str, Any]) -> "ParseResult":
+        return cls(
+            imported=[
+                ParsedQuestion(
+                    question=e["question"], review_reason=e["review_reason"], source=e["source"],
+                    answer_source=e["answer_source"], ai_context=e["ai_context"],
+                )
+                for e in data["imported"]
+            ],
+            skipped=[SkippedExercise(reason=e["reason"], source=e["source"]) for e in data["skipped"]],
+        )
 
 
 def _is_watermark_word(w) -> bool:
@@ -198,15 +256,42 @@ def _load_words(pdf_path: str) -> list[Word]:
     off it directly rather than word position alone."""
     words: list[Word] = []
     with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
+        for page_index, page in enumerate(pdf.pages):
             for w in page.extract_words(extra_attrs=["non_stroking_color", "size"]):
                 if _is_watermark_word(w):
                     continue
                 words.append(Word(
                     text=w["text"], x0=w["x0"], top=w["top"], bottom=w["bottom"],
                     red=_is_red(w.get("non_stroking_color")),
+                    size=float(w.get("size") or 12.0),
+                    x1=float(w.get("x1") or w["x0"]),
+                    page=page_index,
                 ))
     return words
+
+
+_MAX_TITLE_TAIL_WORDS = 12
+
+
+def _drop_previous_title_tail(content: list[Word]) -> list[Word]:
+    """A metadata block's title can wrap past the bit the field window
+    reads ("... Matura Haupt- termin 16/17)"), and when that block ends a
+    page, the wrapped tail is left at the top of the NEXT page -- where it
+    lands at the front of the following exercise's content. Those few
+    stray words made roughly half of a real 314-exercise PDF look like it
+    spanned two pages, which silently cost every one of them its choice
+    table and its picture. Real two-page exercises have a whole page of
+    content, not a title fragment, so a short run on an earlier page
+    followed by a longer one is dropped."""
+    if not content:
+        return content
+    first = content[0].page
+    lead = 0
+    while lead < len(content) and content[lead].page == first:
+        lead += 1
+    if lead < len(content) and lead <= _MAX_TITLE_TAIL_WORDS and len(content) - lead > lead:
+        return content[lead:]
+    return content
 
 
 def _segment_exercises(words: list[Word]) -> list[RawExercise]:
@@ -251,7 +336,7 @@ def _segment_exercises(words: list[Word]) -> list[RawExercise]:
             while j < limit and words[j].text not in (f"{f}:" for f in METADATA_FIELDS):
                 j += 1
             meta[label] = " ".join(w.text for w in words[value_start:j]).strip()
-        exercises.append(RawExercise(words=words[content_start:i], meta=meta))
+        exercises.append(RawExercise(words=_drop_previous_title_tail(words[content_start:i]), meta=meta))
         content_start = j
         i = j
     return exercises
@@ -374,13 +459,18 @@ def _parse_matching_pair(ex: RawExercise) -> tuple[Optional[tuple[list[dict], li
         return None, "fewer than 2 usable left/right term pairs reconstructed"
 
     distractors = [text for letter, text in option_text_by_letter.items() if letter not in used_letters and text]
-    reason = "matching pairs reconstructed from table geometry (color-coded answer key), verify the (garbled-notation-prone) term text"
+    reason = "math notation in these terms may be garbled by the PDF's text extraction"
     if distractors:
         reason += f"; {len(distractors)} unused right-side option(s) imported as distractors"
     return (pairs, distractors), reason
 
 
 def _multi_select_blocks(ex: RawExercise) -> Optional[tuple[list[str], int]]:
+    split = _multi_select_block_words(ex)
+    return None if split is None else (split[0], split[1])
+
+
+def _multi_select_block_words(ex: RawExercise) -> Optional[tuple[list[str], int, list[list[Word]]]]:
     """Shared block-splitting used by both _parse_multi_select (the
     options) and _question_text (the discarded intro sentence) — one
     visually separated block per option, with the instruction sentence
@@ -419,7 +509,7 @@ def _multi_select_blocks(ex: RawExercise) -> Optional[tuple[list[str], int]]:
         if text.endswith(("!", "?", ".")):
             intro_len = idx + 1
             break
-    return block_texts, intro_len
+    return block_texts, intro_len, [[w for row in block for w in row] for block in blocks]
 
 
 def _parse_multi_select(ex: RawExercise) -> tuple[Optional[list[str]], str]:
@@ -437,7 +527,7 @@ def _parse_multi_select(ex: RawExercise) -> tuple[Optional[list[str]], str]:
     options = [o for o in block_texts[intro_len:] if o]
     if len(options) < 2:
         return None, "fewer than 2 non-empty options after the intro sentence"
-    return options, "no correct answer is recoverable from a LaMA Mutiple Choice export — imported ungraded, tick the correct option(s) before use"
+    return options, ""  # no answer key in this format is the NORMAL case -- carried by answer_source, not prose
 
 
 def _question_text(ex: RawExercise, fmt: str) -> str:
@@ -483,7 +573,7 @@ def _question_text(ex: RawExercise, fmt: str) -> str:
     return intro or " ".join(_row_text(r) for r in rows).strip()
 
 
-def _parse_free_response(ex: RawExercise) -> tuple[Optional[str], str]:
+def _parse_free_response(ex: RawExercise) -> tuple[Optional[str], str, str]:
     """The accepted answer for a SOLVED Offenes Antwortformat exercise is
     LaMA's own RED-colored text (see this module's docstring) — the
     problem statement itself stays black. Preferred over the older
@@ -497,21 +587,28 @@ def _parse_free_response(ex: RawExercise) -> tuple[Optional[str], str]:
         candidate = _row_text(sorted(red_words, key=lambda w: (w.top, w.x0))).strip()
         if candidate and len(candidate) <= 80:
             if _NUMERIC_ANSWER_RE.match(candidate.replace(" ", "")):
-                return candidate, "clean numeric answer, high confidence (LaMA's own color-coded solution)"
-            return candidate, "answer extracted from LaMA's own color-coded solution text — still verify math notation (superscripts/fraction bars often mangle in plain extraction)"
+                return candidate, "", ANSWER_PDF
+            # Red text that isn't a plain number is flattened math ("√x 5 2",
+            # "m 4x"): a student can never type that, so grading against it
+            # would mark every correct answer wrong. It is only a GUESS --
+            # ungraded, handed to the AI keying / the teacher's review.
+            return candidate, "math notation in this answer is garbled by the PDF's text extraction (superscripts/fraction bars), so it can't be used as an answer key", ANSWER_GUESS
         # Red text present but too long/empty to trust as a single short
         # answer (probably a multi-step derivation shown in red, not just
         # the final value) — fall through to the plain last-line guess.
 
     rows = _cluster_rows(ex.words, gap=6.0)
     if not rows:
-        return None, "no content rows found"
+        return None, "no content rows found", ANSWER_NONE
     candidate = _row_text(rows[-1]).strip()
     if not candidate or len(candidate) > 60:
-        return None, "no short final-answer line found (likely a multi-line derivation, not a single computable answer)"
+        return None, "no short final-answer line found (likely a multi-line derivation, not a single computable answer)", ANSWER_NONE
+    # No color marking anywhere, so "the last short line" is a GUESS --
+    # even when it happens to look like a clean number (it may just as
+    # well be the last number in the problem statement).
     if _NUMERIC_ANSWER_RE.match(candidate.replace(" ", "")):
-        return candidate, "clean numeric answer, high confidence"
-    return candidate, "answer extracted from math notation that plain text extraction often mangles (lost superscripts/fraction bars) — verify before use"
+        return candidate, "answer guessed from the last line (no color-coded solution in this PDF) — plausible number, not verified", ANSWER_GUESS
+    return candidate, "answer guessed from math notation that plain text extraction often mangles (lost superscripts/fraction bars) — verify before use", ANSWER_GUESS
 
 
 _COMPETENCY_CODE_RE = re.compile(r"^[A-ZÄÖÜ]{2,6}$")
@@ -537,6 +634,177 @@ def _strip_competency_code_noise(ex: RawExercise) -> RawExercise:
     if not codes:
         return ex
     return RawExercise(words=[w for w in ex.words if w.text not in codes], meta=ex.meta)
+
+
+def _region(words: list[Word]) -> Optional[dict[str, Any]]:
+    """Where an exercise sits on its page ({"page", "bbox": [x0, top, x1,
+    bottom]} in PDF points), so it can be rendered back to an image for
+    the AI (render_region_png). None for an exercise spanning pages --
+    those just go to the AI as text."""
+    if not words or len({w.page for w in words}) != 1:
+        return None
+    return {
+        "page": words[0].page,
+        "bbox": [
+            round(min(w.x0 for w in words) - 6, 1), round(min(w.top for w in words) - 6, 1),
+            round(max(w.x1 for w in words) + 6, 1), round(max(w.bottom for w in words) + 6, 1),
+        ],
+    }
+
+
+# One Gemini image "tile" is 768px on a side (~258 tokens); an exercise that
+# fits one or two tiles costs next to nothing, a full-page scan does not.
+_IMAGE_MAX_WIDTH_PX = 768
+_IMAGE_MAX_HEIGHT_PX = 1536
+
+
+def render_region_png(pdf: Any, region: dict[str, Any]) -> Optional[bytes]:
+    """The exercise as a small grayscale PNG (cropped to just its own
+    region, at most 768x1536 px = 1-2 Gemini tiles), or None if it can't
+    be rendered. `pdf` is an already-open pdfplumber PDF -- the caller
+    opens each source file once per scan, not once per exercise. This is
+    what lets the model read real fractions/exponents/roots instead of
+    the flattened text."""
+    try:
+        import io
+        page = pdf.pages[region["page"]]
+        x0, top, x1, bottom = region["bbox"]
+        x0, top = max(0.0, x0), max(0.0, top)
+        x1, bottom = min(float(page.width), x1), min(float(page.height), bottom)
+        if x1 - x0 < 10 or bottom - top < 10:
+            return None
+        scale = min(_IMAGE_MAX_WIDTH_PX / (x1 - x0), _IMAGE_MAX_HEIGHT_PX / (bottom - top), 2.0)
+        img = page.crop((x0, top, x1, bottom)).to_image(resolution=max(40, int(72 * scale))).original.convert("L")
+        buf = io.BytesIO()
+        img.save(buf, "PNG", optimize=True)
+        return buf.getvalue()
+    except Exception:  # noqa: BLE001 - a render failure only costs this exercise its picture
+        return None
+
+
+def _center(w: Word) -> float:
+    return (w.top + w.bottom) / 2
+
+
+def _layout_text(words: list[Word]) -> str:
+    """Reading-order text of one exercise WITH its math layout recovered
+    from font size + position -- the structure plain row text throws away
+    ("x 6 z y 15 − 9 · z 2 y x 6" is really x^6 z^y ... once you know the
+    6 and the y are smaller and raised). Only ever fed to an LLM (see
+    build_key_prompt), never shown to a teacher as the question text:
+    notation is a best-effort hint, not a typesetter.
+
+    Notation used in the output (and explained to the model in the
+    prompt): `^{...}` a superscript run, `_{...}` a subscript run, `(a/b)`
+    two small tokens stacked at the same x (a fraction inside an
+    exponent), `√[n]` a root index sitting over a radical, and
+    `{top} over {bottom}` two short base-size rows stacked over each
+    other (a displayed fraction -- the fraction bar itself is not text,
+    so this is inferred from stacking alone)."""
+    if not words:
+        return ""
+    weight: dict[int, int] = {}
+    for w in words:
+        weight[round(w.size)] = weight.get(round(w.size), 0) + len(w.text)
+    base = float(max(weight, key=lambda k: weight[k]))
+    cutoff = 0.85 * base
+    big = [w for w in words if w.size >= cutoff]
+    small = [w for w in words if w.size < cutoff]
+    rows = _cluster_rows(big, gap=6.0)
+    if not rows:
+        rows = _cluster_rows(words, gap=6.0)
+        small = []
+    refs = [sorted(_center(w) for w in row)[len(row) // 2] for row in rows]
+    per_row: list[list[Word]] = [list(row) for row in rows]
+    orphans: list[Word] = []
+    for w in small:
+        i = min(range(len(rows)), key=lambda k: abs(_center(w) - refs[k]))
+        if abs(_center(w) - refs[i]) <= 1.4 * base:
+            per_row[i].append(w)
+        else:
+            orphans.append(w)
+    if orphans:
+        # A script with no base-size row near it -- keep it, just as its
+        # own line rather than silently dropped.
+        extra = _cluster_rows(orphans, gap=6.0)
+        for row in extra:
+            per_row.append(row)
+            refs.append(sorted(_center(w) for w in row)[len(row) // 2])
+
+    def render_row(row: list[Word], ref: float) -> str:
+        tokens = sorted(row, key=lambda w: w.x0)
+        bigs = [t for t in tokens if t.size >= cutoff]
+        index_for: dict[int, list[Word]] = {}  # id(big token) -> root-index words over it
+        consumed: set[int] = set()
+        for t in tokens:
+            if t.size >= cutoff:
+                continue
+            for b in bigs:
+                if b.text.startswith("√") and b.x0 - 1.0 <= t.x0 <= b.x1 and _center(t) < _center(b):
+                    index_for.setdefault(id(b), []).append(t)
+                    consumed.add(id(t))
+                    break
+        out: list[str] = []
+        i = 0
+        while i < len(tokens):
+            t = tokens[i]
+            if id(t) in consumed:
+                i += 1
+                continue
+            if t.size >= cutoff:
+                text = t.text
+                idx = index_for.get(id(t))
+                if idx:
+                    text = "√[" + " ".join(w.text for w in sorted(idx, key=lambda w: (w.x0, w.top))) + "]" + text[1:]
+                out.append(text)
+                i += 1
+                continue
+            run = [t]
+            j = i + 1
+            while j < len(tokens):
+                nxt = tokens[j]
+                if id(nxt) in consumed:
+                    j += 1
+                    continue
+                if nxt.size >= cutoff or nxt.x0 - max(r.x1 for r in run) > 0.6 * base:
+                    break
+                run.append(nxt)
+                j += 1
+            columns: list[list[Word]] = []
+            for w in sorted(run, key=lambda w: w.x0):
+                if columns and abs(columns[-1][0].x0 - w.x0) <= 2.0:
+                    columns[-1].append(w)
+                else:
+                    columns.append([w])
+            parts = [
+                col[0].text if len(col) == 1 else "(" + "/".join(c.text for c in sorted(col, key=lambda c: c.top)) + ")"
+                for col in columns
+            ]
+            run_center = (min(w.top for w in run) + max(w.bottom for w in run)) / 2
+            mark = "_" if run_center - ref > 0.08 * base else "^"
+            out.append(f"{mark}{{{' '.join(parts)}}}")
+            i = j
+        return " ".join(out)
+
+    order = sorted(range(len(per_row)), key=lambda k: refs[k])
+    rendered = [(render_row(per_row[k], refs[k]), per_row[k], refs[k]) for k in order]
+    lines: list[str] = []
+    k = 0
+    while k < len(rendered):
+        text, row, ref = rendered[k]
+        if k + 1 < len(rendered):
+            ntext, nrow, nref = rendered[k + 1]
+            x_lo, x_hi = min(w.x0 for w in row), max(w.x1 for w in row)
+            nx_lo, nx_hi = min(w.x0 for w in nrow), max(w.x1 for w in nrow)
+            overlap = min(x_hi, nx_hi) - max(x_lo, nx_lo)
+            narrow = min(x_hi - x_lo, nx_hi - nx_lo)
+            if len(row) <= 5 and len(nrow) <= 5 and narrow > 0 and overlap >= 0.5 * narrow and (nref - ref) < 1.8 * base:
+                lines.append(f"{{{text}}} over {{{ntext}}}")
+                k += 2
+                continue
+        lines.append(text)
+        k += 1
+    return "\n".join(lines)
 
 
 _AI_REVIEW_PREFIX = "AI-assisted extraction (Gemini) -- geometry-based parsing failed here; REQUIRES teacher review before use"
@@ -635,6 +903,425 @@ def _ai_extract_matching_pair(ex: RawExercise, ai_fallback: AiFallback) -> tuple
     return (clean_pairs, clean_distractors), _AI_REVIEW_PREFIX
 
 
+def _multi_select_context(ex: RawExercise, options: list[str], geometry_options: bool) -> dict[str, Any]:
+    """The AI-facing view of a multi_select exercise (see ParsedQuestion's
+    ai_context). When the options came from the geometry parser, each
+    option's OWN words get their own layout text, aligned 1:1 with
+    `options` -- so "option index 2" means the same thing to the model as
+    to the question it will later be graded against. If the AI fallback
+    produced the options instead (no block structure to key off), the
+    whole exercise's layout text is all there is to offer."""
+    split = _multi_select_block_words(ex) if geometry_options else None
+    if split is not None:
+        block_texts, intro_len, block_words = split
+        kept = [i for i in range(intro_len, len(block_texts)) if block_texts[i]]
+        if len(kept) == len(options):
+            return {
+                "question": _layout_text([w for i in range(intro_len) for w in block_words[i]]),
+                "options": [_layout_text(block_words[i]) for i in kept],
+                "current_answer": None,
+                "region": _region(ex.words),
+            }
+    return {"question": _layout_text(ex.words), "options": None, "current_answer": None, "region": _region(ex.words)}
+
+
+_CHOICE_INSTRUCTION_RE = re.compile(r"put a cross|cross next|place a cross|kreuze|ankreuz|^\s*(for which|which of)", re.I | re.M)
+_INTERPRETIVE_RE = re.compile(
+    r"\b(interpret|describe|explain|justify|give a reason|state what|write down what|what (this|the) (value|result|expression)"
+    r"|interpretier|beschreib|erkl[aä]r|begr[uü]nd)",
+    re.I,
+)
+_SELF_CORRECTION_RE = re.compile(r"\bwait\b|let me re-?(evaluate|check|think)|\bhmm\b|not indexed|options? (are|is) likely", re.I)  # a rationale that argues with itself is not a confident key
+_MAX_TRUSTED_OPTIONS = 6  # LaMa multiple choice has 4-5 rows; more means the splitter swallowed diagram labels or the intro
+
+
+def _fix_mojibake(text: str) -> str:
+    """Undo UTF-8 read as Latin-1 ("213.69Â°" -> "213.69°") -- a real
+    artifact seen in model replies, and an answer key with it would never
+    match what a student types."""
+    if "Ã" not in text and "Â" not in text:
+        return text
+    try:
+        return text.encode("cp1252").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return text
+
+
+def _key_is_gradeable(pq: ParsedQuestion) -> bool:
+    """False for exercises where an AI key would only be a confident-looking
+    guess, so the question stays calmly "waiting for an answer key" instead:
+      - multiple choice whose option list can't be trusted to line up with
+        the picture (no per-option split, more rows than LaMa ever prints,
+        or the instruction line itself sitting among the options) -- spot
+        checks showed the model keys those anyway, against garbage indexes;
+      - free response that asks to interpret/describe/explain: the answer is
+        a sentence, and exact-match grading of a sentence would mark every
+        correct student wrong (and a 223%-vs-323% slip in one is invisible)."""
+    ctx = pq.ai_context or {}
+    q = pq.question
+    if q["type"] == "multi_select":
+        opts = ctx.get("options")
+        if not opts or len(opts) > _MAX_TRUSTED_OPTIONS or any(_CHOICE_INSTRUCTION_RE.search(o or "") for o in opts):
+            return False
+    elif q["type"] == "free_response":
+        if _INTERPRETIVE_RE.search(ctx.get("question") or q.get("text") or ""):
+            return False
+    return True
+
+
+def needs_ai_key(pq: ParsedQuestion) -> bool:
+    """True for a question whose answer key is missing or only guessed,
+    i.e. one an AI-drafted key (see build_key_prompt) is wanted for. A key
+    read straight off LaMa's own solution colour (ANSWER_PDF) is never
+    second-guessed, and matching_pair is always already graded."""
+    return pq.answer_source in (ANSWER_NONE, ANSWER_GUESS) and pq.ai_context is not None and _key_is_gradeable(pq)
+
+
+KEY_PROMPT_VERSION = 3
+
+_KEY_COUNT_CUES = (
+    (re.compile(r"\b(beiden|zwei|two|both)\b", re.IGNORECASE), 2),
+    (re.compile(r"\b(drei|three)\b", re.IGNORECASE), 3),
+    (re.compile(r"\b(vier|four)\b", re.IGNORECASE), 4),
+)
+# parse_key_reply's reason for an exercise the model's reply never mentioned
+# -- also what EVERY exercise of a batch gets when the reply wasn't usable
+# JSON at all, which a caller treats as a failed batch (retry next scan)
+# rather than a per-question verdict worth caching.
+NO_ENTRY_REASON = "the AI reply had no entry for this exercise"
+# A LaMa "Mutiple Choice" exercise is a real table: one row per option, and
+# in a SOLVED export the correct rows carry a checked box in a narrow right-
+# hand column. None of that is text, and none of it is a vector shape
+# pdfminer reports (page.rects/lines/curves are empty on these pages): the
+# table borders are 1px-wide EMBEDDED IMAGES and the box only shows when the
+# page is rendered. So it's read the way a person reads it -- find the rows
+# from the borders, take each row's words, render the checkbox cell and see
+# which have ink in them. This also fixes option splitting for these
+# exercises: the old gap-based block heuristic could swallow a wrapped
+# instruction sentence as "option A", shifting every index by one. (This
+# module's docstring used to say the marking was unrecoverable -- that came
+# from looking only at the embedded images, not at the rendered page.)
+_BOX_INSET_PT = 4.0  # stay clear of the cell's own border lines
+_BOX_HALF_HEIGHT_PT = 6.0
+_BOX_INK_THRESHOLD = 0.012  # fraction of dark pixels in the cell window that counts as "a mark is there"
+_HAIRLINE_MAX_PT = 3.0
+
+
+@dataclass
+class ChoiceTable:
+    intro: list[Word]  # words above the table -- the actual question statement
+    rows: list[list[Word]]  # one word list per option row, left-to-right content only
+    ink: list[float]  # dark-pixel fraction in each row's checkbox cell
+    checked: Optional[list[int]] = None  # filled in by read_choice_table when the marks are unambiguous
+
+
+def read_choice_table(pdf: Any, ex: RawExercise, question_text_for_cue: str = "") -> Optional[ChoiceTable]:
+    """The exercise's option table, or None if it doesn't look like exactly
+    one table with a narrow checkbox column (then the caller falls back to
+    the gap-based splitting). `checked` is only set when the ticks are
+    unambiguous: at least one, never all, and consistent with a count the
+    question states ("die beiden" = exactly two)."""
+    if not ex.words or len({w.page for w in ex.words}) != 1:
+        return None
+    try:
+        page = pdf.pages[ex.words[0].page]
+        top, bottom = min(w.top for w in ex.words) - 4, max(w.bottom for w in ex.words) + 4
+        hair = [
+            im for im in page.images
+            if im["top"] < bottom and im["bottom"] > top
+        ]
+        horiz = [im for im in hair if (im["bottom"] - im["top"]) <= _HAIRLINE_MAX_PT and (im["x1"] - im["x0"]) > 12]
+        vert = [im for im in hair if (im["x1"] - im["x0"]) <= _HAIRLINE_MAX_PT and (im["bottom"] - im["top"]) > 12]
+        if len(horiz) < 3 or len(vert) < 3:
+            return None
+        # The table's frame comes from its VERTICAL borders; only horizontal
+        # lines that span exactly that frame are row separators (the many
+        # short hairlines are fraction bars inside the options, and a page
+        # with a second table -- a matching exercise's two grids -- has no
+        # single frame that fits, so it's rejected below).
+        xs: list[float] = []
+        for x in sorted(im["x0"] for im in vert):
+            if not xs or x - xs[-1] > 1.5:
+                xs.append(x)
+        if len(xs) < 3:
+            return None
+        frame_lo, frame_hi = xs[0], xs[-1]
+        lines = [im for im in horiz if abs(im["x0"] - frame_lo) <= 3 and abs(im["x1"] - frame_hi) <= 4]
+        ys: list[float] = []
+        for y in sorted(im["top"] for im in lines):
+            if not ys or y - ys[-1] > 1.5:
+                ys.append(y)
+        if len(ys) < 3:
+            return None
+        x_left, x_right = xs[-2], xs[-1]
+        if not (10 <= x_right - x_left <= 40):
+            return None
+        bounds = [(y0, y1) for y0, y1 in zip(ys, ys[1:]) if y1 - y0 >= 14]
+        if len(bounds) < 2:
+            return None
+        intro = [w for w in ex.words if _center(w) < ys[0]]
+        rows: list[list[Word]] = []
+        mids: list[float] = []
+        for y0, y1 in bounds:
+            row = [w for w in ex.words if y0 <= _center(w) < y1 and (w.x0 + w.x1) / 2 < x_left]
+            if not row:
+                return None  # an option row with no text (a pure-image option) -- can't be represented
+            rows.append(row)
+            mids.append((y0 + y1) / 2)
+        # ONE render of the whole checkbox column, sliced per row -- rendering
+        # each cell separately costs a pdfium page render apiece, which made a
+        # 300-exercise PDF take half an hour to parse.
+        res = 216
+        px_per_pt = res / 72.0
+        y_top = bounds[0][0]
+        column = page.crop((x_left + _BOX_INSET_PT, y_top, x_right - _BOX_INSET_PT, bounds[-1][1])).to_image(resolution=res).original.convert("L")
+        width, height = column.size
+        gray = column.tobytes()
+        ink = []
+        for mid in mids:
+            r0 = max(0, int((mid - _BOX_HALF_HEIGHT_PT - y_top) * px_per_pt))
+            r1 = min(height, int((mid + _BOX_HALF_HEIGHT_PT - y_top) * px_per_pt))
+            cell = gray[r0 * width:r1 * width]
+            ink.append(sum(1 for px in cell if px < 110) / max(1, len(cell)))
+    except Exception:  # noqa: BLE001 - any rendering trouble just means "can't read it as a table"
+        return None
+    table = ChoiceTable(intro=intro, rows=rows, ink=ink)
+    checked = [i for i, f in enumerate(ink) if f > _BOX_INK_THRESHOLD]
+    # Marks must be clearly present or clearly absent: a cell in the grey
+    # zone (a border sliver, a smudge) means this read isn't trustworthy.
+    ambiguous = any(_BOX_INK_THRESHOLD * 0.25 < f <= _BOX_INK_THRESHOLD for f in ink)
+    expected = next((n for rx, n in _KEY_COUNT_CUES if rx.search(question_text_for_cue)), None)
+    if checked and len(checked) < len(rows) and not ambiguous and (expected is None or len(checked) == expected):
+        table.checked = checked
+    return table
+
+
+_MAX_AI_ANSWER_CHARS = 200  # mirrors math_teacher.py's MAX_ACCEPTED_ANSWER_LENGTH
+_MAX_AI_RATIONALE_CHARS = 300
+
+
+def build_key_prompt(items: list[dict[str, Any]]) -> str:
+    """One prompt for a BATCH of exercises (every item: {"id", "type":
+    "multi_select"|"free_response", "text", "options"|None, "context":
+    ParsedQuestion.ai_context}). Strict JSON out -- see parse_key_reply,
+    which validates every field against the question it belongs to
+    rather than trusting the model."""
+    payload = []
+    for it in items:
+        ctx = it["context"]
+        entry: dict[str, Any] = {"id": it["id"], "type": it["type"], "question": ctx["question"] or it["text"]}
+        if it["type"] == "multi_select":
+            entry["options"] = ctx["options"] if ctx.get("options") else it["options"]
+        if ctx.get("current_answer"):
+            entry["unverified_guess"] = ctx["current_answer"]
+        if it.get("image_index") is not None:
+            entry["image"] = it["image_index"]
+        payload.append(entry)
+    return (
+        "You are drafting the ANSWER KEY for exercises from a school math worksheet (Austrian LaMa/BIFIE format, "
+        "German or English, mostly algebra: powers, roots, term rewriting, some functions/geometry). A teacher will "
+        "check your work, but wrong answers waste their time, so correctness matters more than coverage.\n\n"
+        "The exercises were extracted from a PDF, so formulas arrive flattened into text with layout hints:\n"
+        "  ^{...} = superscript (an exponent); _{...} = subscript; (a/b) = two stacked tokens, i.e. a fraction "
+        "(usually inside an exponent); √[n] = an n-th root (the index sat over the radical); {A} over {B} = a fraction "
+        "with numerator A and denominator B (the bar itself is not text). Some tokens are still garbled "
+        "((cid:NN) are bracket glyphs; a lone digit or letter may belong to a neighbouring term). Diagrams and graphs "
+        "are NOT in the text -- an exercise that depends on one cannot be answered unless it has an image.\n"
+        "If an exercise has an \"image\" number N, the Nth attached picture (counting from 1, in order) is the "
+        "authoritative rendering of that exercise: read the formulas from the picture and treat the text only as a rough hint.\n\n"
+        "Per exercise:\n"
+        '  - type "multi_select": choose EVERY correct option. "answer" = a JSON list of 0-based indexes into that '
+        'exercise\'s "options" array (the array order is the order the options appear on the page). Follow the '
+        'instruction in the question ("die beiden" = exactly two). Verify each option by actually simplifying it.\n'
+        '  - type "free_response": solve it. "answer" = the final result as short plain text (a number, or a '
+        'simplified expression written like x^(3/2)). If "unverified_guess" is present it is only an untrusted '
+        "guess of the answer scraped from the PDF -- solve independently.\n"
+        '  - If you cannot reconstruct the exercise reliably, it needs a diagram, or it is ambiguous: "answer": null, '
+        '"confident": false. Never guess.\n\n'
+        "Reply with ONLY one JSON object, no markdown, no commentary, exactly this shape:\n"
+        '{"answers": [{"id": "<the exercise id>", "answer": <list of ints | string | null>, "confident": <true|false>, '
+        '"rationale": "<one short sentence: why this is the answer>"}]}\n'
+        "Include one entry per exercise, same ids.\n\n"
+        "Exercises:\n" + json.dumps(payload, ensure_ascii=False)
+    )
+
+
+@dataclass
+class KeyOutcome:
+    """The validated result for ONE exercise of a key batch. status:
+    "ok" (answer is usable -- `correct_indices` for multi_select,
+    `answer` for free_response), "unsure" (the model itself declined --
+    cacheable, asking again won't change its mind), or "invalid" (the
+    model answered but it fails validation against the question --
+    `reason` says how)."""
+    status: str
+    correct_indices: Optional[list[int]] = None
+    answer: Optional[str] = None
+    rationale: str = ""
+    reason: str = ""
+
+
+def _extract_json_object(reply: str) -> Optional[Any]:
+    text = reply.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1]
+        if text.rstrip().endswith("```"):
+            text = text.rstrip()[:-3]
+    try:
+        return json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        pass
+    start, end = text.find("{"), text.rfind("}")
+    if start != -1 and end > start:
+        try:
+            return json.loads(text[start:end + 1])
+        except (json.JSONDecodeError, ValueError):
+            return None
+    return None
+
+
+def parse_key_reply(reply: Optional[str], items: list[dict[str, Any]]) -> dict[str, KeyOutcome]:
+    """Validates a build_key_prompt reply against the exact items it was
+    asked about. Returns one KeyOutcome per item id -- never raises, never
+    omits an id: anything the model skipped, mangled or got out of range
+    is an explicit "invalid" with a reason, so a caller can tell "the
+    model said it isn't sure" from "the reply was unusable"."""
+    outcomes: dict[str, KeyOutcome] = {}
+    parsed = _extract_json_object(reply) if reply else None
+    entries = parsed.get("answers") if isinstance(parsed, dict) else parsed
+    by_id: dict[str, dict] = {}
+    if isinstance(entries, list):
+        for e in entries:
+            if isinstance(e, dict) and isinstance(e.get("id"), str) and e["id"] not in by_id:
+                by_id[e["id"]] = e
+
+    for it in items:
+        e = by_id.get(it["id"])
+        if e is None:
+            outcomes[it["id"]] = KeyOutcome("invalid", reason=NO_ENTRY_REASON)
+            continue
+        rationale = e.get("rationale")
+        wavering = isinstance(rationale, str) and bool(_SELF_CORRECTION_RE.search(rationale))
+        rationale = " ".join(rationale.split())[:_MAX_AI_RATIONALE_CHARS] if isinstance(rationale, str) else ""
+        answer = e.get("answer")
+        if answer is None or e.get("confident") is False or wavering:
+            outcomes[it["id"]] = KeyOutcome("unsure", rationale=rationale, reason="the AI wasn't confident enough to answer")
+            continue
+        if it["type"] == "multi_select":
+            n_options = len(it["options"])
+            if not isinstance(answer, list) or not answer or not all(isinstance(i, int) and not isinstance(i, bool) for i in answer):
+                outcomes[it["id"]] = KeyOutcome("invalid", reason="multi_select answer must be a non-empty list of option indexes")
+                continue
+            indices = sorted(set(answer))
+            if indices[0] < 0 or indices[-1] >= n_options:
+                outcomes[it["id"]] = KeyOutcome("invalid", reason=f"option index out of range (0..{n_options - 1})")
+                continue
+            if len(indices) == n_options:
+                outcomes[it["id"]] = KeyOutcome("invalid", reason="the AI marked every option correct")
+                continue
+            expected = next((n for rx, n in _KEY_COUNT_CUES if rx.search(it["text"])), None)
+            if expected is not None and len(indices) != expected:
+                outcomes[it["id"]] = KeyOutcome("invalid", reason=f"the question asks for {expected} options but the AI picked {len(indices)}")
+                continue
+            outcomes[it["id"]] = KeyOutcome("ok", correct_indices=indices, rationale=rationale)
+        else:  # free_response
+            if isinstance(answer, bool) or not isinstance(answer, (str, int, float)):
+                outcomes[it["id"]] = KeyOutcome("invalid", reason="free_response answer must be a string or number")
+                continue
+            text = _fix_mojibake(str(answer).strip())
+            if not text or len(text) > _MAX_AI_ANSWER_CHARS or "\n" in text:
+                outcomes[it["id"]] = KeyOutcome("invalid", reason="free_response answer is empty or too long to be a short final answer")
+                continue
+            outcomes[it["id"]] = KeyOutcome("ok", answer=text, rationale=rationale)
+    return outcomes
+
+
+# What a catalog entry's answer key looks like to a teacher right now --
+# lama_bank.py publishes this as `answer_state`, and it is the ONLY thing
+# the UI colors by (never review_reason, which is prose). None of these is
+# an error, so none is rendered as one:
+STATE_PDF = "pdf"  # key read from LaMa's own solution marking
+STATE_VERIFIED = "verified"  # a guessed key the AI independently agreed with
+STATE_AI = "ai"  # key drafted by the AI -- graded from the start, but flagged "check it"
+STATE_GUESS = "guess"  # unverified guess from the PDF (AI off/unsure/declined) -- NOT graded: shown as "teacher review"
+STATE_MISSING = "missing"  # no key; imports ungraded ("waiting for an answer key")
+
+_AI_EXTRACT_NOTE = "Recovered by the AI from the PDF text -- geometry-based parsing failed on this exercise"
+
+
+def initial_answer_state(pq: ParsedQuestion) -> str:
+    """The answer state a freshly parsed question has BEFORE any AI
+    keying pass -- and the one it keeps if that pass is unavailable, so
+    "AI off" degrades to exactly today's import behavior."""
+    if pq.answer_source == ANSWER_PDF:
+        return STATE_PDF
+    if pq.answer_source == ANSWER_GUESS:
+        return STATE_GUESS
+    if pq.answer_source == ANSWER_AI_EXTRACT:
+        # Whole structure came from the AI fallback: gradable, but a
+        # teacher should look -- same marker an AI-drafted key gets.
+        pq.question["ai_answer"] = {"rationale": _AI_EXTRACT_NOTE, "model": None}
+        return STATE_AI
+    return STATE_MISSING
+
+
+def key_cache_id(pq: ParsedQuestion) -> str:
+    """Stable identity of a question's key REQUEST -- same exercise text
+    in a different PDF (or the same PDF re-uploaded) hashes the same, so
+    a cached AI answer is reused instead of re-paid. Folds in
+    KEY_PROMPT_VERSION so a prompt change invalidates every old entry."""
+    import hashlib
+    q = pq.question
+    blob = json.dumps(
+        [KEY_PROMPT_VERSION, q["type"], q["text"], q.get("options"), pq.ai_context],
+        ensure_ascii=False, sort_keys=True,
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _normalize_answer(a: str) -> str:
+    return re.sub(r"\s+", "", a).replace(",", ".").lower()
+
+
+def answers_agree(a: str, b: str) -> bool:
+    """Whether two free-response answer strings say the same thing --
+    numerically when both are plain numbers (1.0 == 1 == "1,0"), else by
+    whitespace/case-insensitive text equality. Deliberately conservative:
+    a False here only means "treat the AI's answer as a disagreement the
+    teacher should look at", never silently overwrites anything."""
+    na, nb = _normalize_answer(a), _normalize_answer(b)
+    try:
+        return float(na) == float(nb)
+    except ValueError:
+        return na == nb
+
+
+def apply_key_outcome(pq: ParsedQuestion, outcome: KeyOutcome, model: Optional[str]) -> str:
+    """Applies one validated AI outcome to a question IN PLACE and returns
+    its resulting answer state. The AI's key becomes the question's real,
+    gradable answer key -- so a student answering right after import is
+    graded -- plus an `ai_answer` marker (math_teacher.py's "Question
+    shape") so the teacher sees "AI answer -- check it" until they accept
+    or edit it. A free_response whose guessed key the AI independently
+    agrees with is upgraded to STATE_VERIFIED with no marker (two
+    independent reads agree; nothing for the teacher to check)."""
+    q = pq.question
+    if outcome.status != "ok":
+        return initial_answer_state(pq)
+    if q["type"] == "multi_select":
+        q["correct_indices"] = list(outcome.correct_indices or [])
+        q["ai_answer"] = {"rationale": outcome.rationale or None, "model": model}
+        return STATE_AI
+    # free_response
+    guess = (pq.ai_context or {}).get("current_answer") if pq.answer_source == ANSWER_GUESS else None
+    if guess is not None and outcome.answer is not None and answers_agree(guess, outcome.answer):
+        q["accepted_answers"] = [guess]
+        return STATE_VERIFIED
+    q["accepted_answers"] = [outcome.answer]
+    q["ai_answer"] = {"rationale": outcome.rationale or None, "model": model}
+    return STATE_AI
+
+
 def parse_lama_pdf(
     pdf_path: str,
     default_tier: str = "medium",
@@ -668,6 +1355,7 @@ def parse_lama_pdf(
     exercises = [_strip_competency_code_noise(ex) for ex in _segment_exercises(words)]
     total_ex = len(exercises)
     result = ParseResult()
+    render_pdf = pdfplumber.open(pdf_path)  # for reading checkbox marks; closed at the end
 
     def _tick(i: int) -> bool:
         return on_progress is None or on_progress(i, total_ex)
@@ -688,9 +1376,10 @@ def parse_lama_pdf(
         text = _question_text(ex, fmt) or title
 
         if fmt == "Offenes Antwortformat":
-            answer, reason = _parse_free_response(ex)
+            answer, reason, answer_source = _parse_free_response(ex)
             if answer is None and ai_fallback is not None:
                 answer, reason = _ai_extract_free_response(ex, ai_fallback)
+                answer_source = ANSWER_AI_EXTRACT if answer is not None else ANSWER_NONE
             if answer is None:
                 result.skipped.append(SkippedExercise(reason=reason, source=source))
                 if not _tick(i):
@@ -700,10 +1389,34 @@ def parse_lama_pdf(
                 "tier": default_tier, "type": "free_response", "text": text,
                 "accepted_answers": [answer], "points": 1,
             }
-            result.imported.append(ParsedQuestion(question=question, review_reason=reason, source=source))
+            context = None
+            if answer_source == ANSWER_GUESS:
+                # A scraped "last line" is never graded against students: a
+                # wrong "incorrect" is worse than no grade. It only becomes the
+                # key if the AI independently agrees (apply_key_outcome) or the
+                # teacher accepts it; until then the question imports ungraded
+                # and the guess rides along as context for the AI.
+                question["accepted_answers"] = None
+                context = {
+                    "question": _layout_text([w for w in ex.words if not w.red]),
+                    "options": None,
+                    "current_answer": answer,
+                    "region": _region([w for w in ex.words if not w.red]),
+                }
+            result.imported.append(ParsedQuestion(
+                question=question, review_reason=reason, source=source, answer_source=answer_source, ai_context=context,
+            ))
 
         elif fmt == "Mutiple Choice":
-            options, reason = _parse_multi_select(ex)
+            table = read_choice_table(render_pdf, ex, _question_text(ex, fmt))
+            if table is not None:
+                options = [" ".join(_row_text(r) for r in _cluster_rows(row)) for row in table.rows]
+                text = " ".join(_row_text(r) for r in _cluster_rows(table.intro)).strip() or text
+                reason = ""
+                geometry_options = True
+            else:
+                options, reason = _parse_multi_select(ex)
+                geometry_options = options is not None
             if options is None and ai_fallback is not None:
                 options, reason = _ai_extract_multi_select(ex, ai_fallback)
             if options is None:
@@ -711,16 +1424,35 @@ def parse_lama_pdf(
                 if not _tick(i):
                     break
                 continue
+            checked = table.checked if table is not None else None
             question = {
                 "tier": default_tier, "type": "multi_select", "text": text,
-                "options": options, "correct_indices": None, "points": 1,
+                "options": options, "correct_indices": checked, "points": 1,
             }
-            result.imported.append(ParsedQuestion(question=question, review_reason=reason, source=source))
+            if checked is not None:
+                # Read straight off the solved export's own checked boxes:
+                # as trustworthy as a color-coded solution, no AI involved.
+                result.imported.append(ParsedQuestion(question=question, review_reason="", source=source, answer_source=ANSWER_PDF))
+            else:
+                if table is not None:
+                    context = {
+                        "question": _layout_text(table.intro),
+                        "options": [_layout_text(row) for row in table.rows],
+                        "current_answer": None,
+                        "region": _region(ex.words),
+                    }
+                else:
+                    context = _multi_select_context(ex, options, geometry_options)
+                result.imported.append(ParsedQuestion(
+                    question=question, review_reason=reason, source=source, answer_source=ANSWER_NONE, ai_context=context,
+                ))
 
         else:  # Zuordnungsformat
             parsed, reason = _parse_matching_pair(ex)
+            answer_source = ANSWER_PDF
             if parsed is None and ai_fallback is not None:
                 parsed, reason = _ai_extract_matching_pair(ex, ai_fallback)
+                answer_source = ANSWER_AI_EXTRACT
             if parsed is None:
                 result.skipped.append(SkippedExercise(reason=reason, source=source))
                 if not _tick(i):
@@ -734,11 +1466,12 @@ def parse_lama_pdf(
                 "tier": default_tier, "type": "matching_pair", "text": text,
                 "pairs": pairs, "distractors": distractors or None, "points": 1,
             }
-            result.imported.append(ParsedQuestion(question=question, review_reason=reason, source=source))
+            result.imported.append(ParsedQuestion(question=question, review_reason=reason, source=source, answer_source=answer_source))
 
         if not _tick(i):
             break
 
+    render_pdf.close()
     return result
 
 

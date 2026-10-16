@@ -16,7 +16,15 @@ new idea):
   the same reasoning physics_test.py's active_viewpoint subscription
   already uses). Expected shape:
       {"prompt": "...", "context": {...arbitrary JSON, optional...},
-       "request_id": "...optional, echoed back untouched..."}
+       "request_id": "...optional, echoed back untouched...",
+       "attachments": [{"mime_type": "audio/wav", "data_base64": "..."}]}
+  `attachments` is optional and GENERIC — any calling spin may pass
+  inline media (a recorded voice instruction, a screenshot, ...) that
+  Gemini receives alongside the prompt as `inlineData` parts, in order.
+  This file never inspects or interprets the bytes; what the media MEANS
+  is the prompt's job, exactly like `context`. A request with no
+  `attachments` key behaves byte-for-byte as it always has. See
+  `normalize_attachments` for the validation limits.
 - Calls the Gemini API for real (see `call_gemini`), on its OWN worker
   thread per request — NOT inline in the push-dispatch callback, since
   sotrice_client.py's dispatch thread is single and sequential (see its
@@ -82,6 +90,7 @@ Registered in plugins/registry.json as "ai-test".
 """
 
 import json
+import re
 import threading
 import time
 import urllib.error
@@ -181,12 +190,85 @@ def load_api_key() -> Optional[str]:
     return stripped or None
 
 
-def call_gemini(api_key: str, model: str, prompt: str, context: Optional[dict]) -> str:
+# Gemini's inline-data request ceiling is 20 MB TOTAL (prompt + every
+# attachment, base64-inflated by ~33%) — anything bigger has to go
+# through its separate Files API, which this stdlib-only skeleton
+# deliberately doesn't implement. Capping decoded bytes well under that
+# turns "Gemini rejected a 25 MB request after a slow upload" into an
+# immediate, specific error the calling spin can show.
+MAX_ATTACHMENTS = 8
+MAX_ATTACHMENT_TOTAL_BYTES = 12 * 1024 * 1024
+
+# Only media types Gemini actually ingests as inline data and a spin has a
+# real reason to send. An allow-list (not "anything with a slash") so a
+# spin can't use this relay to push arbitrary blobs at the API, and a typo'd
+# type fails here with a clear message instead of as an opaque Gemini 400.
+ALLOWED_ATTACHMENT_MIME_TYPES = frozenset(
+    {
+        "audio/wav",
+        "audio/mpeg",
+        "audio/ogg",
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "application/pdf",
+    }
+)
+# Standard base64 alphabet, optional trailing padding, nothing else (no
+# whitespace/newlines, no URL-safe alphabet) -- exactly what Gemini's
+# inlineData.data expects.
+_BASE64_RE = re.compile(r"[A-Za-z0-9+/]*={0,2}")
+
+
+def normalize_attachments(raw: Any) -> list[dict]:
+    """Validates a request's optional `attachments` field and returns the
+    Gemini `inlineData` parts to send (each `{"inlineData": {"mimeType",
+    "data"}}`). Raises ValueError with a human-readable message — never
+    echoing any of the data itself — on a malformed attachment, so the
+    caller turns it into an ordinary `ai_response.error` instead of
+    forwarding garbage to Gemini (and paying for the round trip).
+
+    Does NOT decode the base64: Gemini wants it base64 anyway. It is
+    validated by shape (alphabet + length multiple of 4 + padding only at
+    the end) and the size check below uses the base64 length (decoded size
+    is len*3/4 minus padding), so a multi-megabyte attachment is never
+    allocated twice just to be checked."""
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError("attachments must be a list")
+    if len(raw) > MAX_ATTACHMENTS:
+        raise ValueError(f"too many attachments ({len(raw)}, max {MAX_ATTACHMENTS})")
+    parts: list[dict] = []
+    total = 0
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise ValueError(f"attachment {index} must be an object")
+        mime_type = item.get("mime_type")
+        data = item.get("data_base64")
+        if not isinstance(mime_type, str) or mime_type not in ALLOWED_ATTACHMENT_MIME_TYPES:
+            raise ValueError(
+                f"attachment {index} has an unsupported mime_type (allowed: {', '.join(sorted(ALLOWED_ATTACHMENT_MIME_TYPES))})"
+            )
+        if not isinstance(data, str) or not data:
+            raise ValueError(f"attachment {index} needs non-empty data_base64")
+        if len(data) % 4 != 0 or not _BASE64_RE.fullmatch(data):
+            raise ValueError(f"attachment {index} data_base64 isn't valid base64")
+        total += len(data) * 3 // 4
+        if total > MAX_ATTACHMENT_TOTAL_BYTES:
+            raise ValueError(f"attachments too large (over {MAX_ATTACHMENT_TOTAL_BYTES // (1024 * 1024)} MB total)")
+        parts.append({"inlineData": {"mimeType": mime_type, "data": data}})
+    return parts
+
+
+def call_gemini(api_key: str, model: str, prompt: str, context: Optional[dict], attachments: Optional[list[dict]] = None) -> str:
     """Makes one real, synchronous call to the Gemini API and returns the
     model's plain text reply. Raises on any failure (bad key, network
     error, empty response) — the caller decides how to turn that into an
     `ai_response.error` string; this function's only job is "ask Gemini,
     return text or raise."
+
+    `attachments` is the already-validated output of `normalize_attachments`.
 
     Deliberately stdlib-only (`urllib.request`, not `requests` or the
     `google-genai` SDK) — every other plugin in this codebase runs under
@@ -201,7 +283,11 @@ def call_gemini(api_key: str, model: str, prompt: str, context: Optional[dict]) 
         # bare prompt. Plain JSON, not prose, so structure survives.
         full_prompt = f"{prompt}\n\nContext:\n{json.dumps(context)}"
 
-    body = json.dumps({"contents": [{"parts": [{"text": full_prompt}]}]}).encode("utf-8")
+    # Media parts come BEFORE the text instruction — Gemini's own
+    # guidance for multimodal prompts, and it keeps "what to do with the
+    # attached audio/image" as the last thing the model reads.
+    parts = list(attachments or []) + [{"text": full_prompt}]
+    body = json.dumps({"contents": [{"parts": parts}]}).encode("utf-8")
     endpoint = GEMINI_ENDPOINT_TEMPLATE.format(model=model)
     request = urllib.request.Request(
         f"{endpoint}?key={api_key}",
@@ -310,19 +396,39 @@ def main():
             request_id = value.get("request_id")
             context = value.get("context")
             task_hint = value.get("task_hint")
+            try:
+                attachments = normalize_attachments(value.get("attachments"))
+            except ValueError as exc:
+                # A malformed attachment gets a real, immediate error
+                # response (not a silent drop, which would leave the
+                # caller waiting out its own timeout) — and no dedup
+                # entry, since nothing was billed or answered.
+                print(f"[{name}] rejecting ai_request on entity {entity}: {exc}")
+                world.set_attribute(
+                    entity,
+                    "ai_response",
+                    {"request_id": request_id, "text": None, "model": None, "error": f"bad attachments: {exc}"},
+                )
+                return
 
-            dedup_key = (entity, request_id)
-            with answered_lock:
-                if dedup_key in answered:
-                    return
-                answered.add(dedup_key)
+            # Dedup only requests that carry an id: with request_id=None
+            # every request from an entity shares one key, so the SECOND
+            # id-less request from that entity would be silently dropped
+            # forever. An id-less request can't be told apart from a
+            # genuine repeat, so it is always answered.
+            if request_id is not None:
+                dedup_key = (entity, request_id)
+                with answered_lock:
+                    if dedup_key in answered:
+                        return
+                    answered.add(dedup_key)
 
             # One worker thread per request — see module docstring for
             # why this must NOT run inline on sotrice_client's shared
             # dispatch thread.
             threading.Thread(
                 target=_answer_request,
-                args=(world, name, settings, entity, request_id, prompt, context, task_hint),
+                args=(world, name, settings, entity, request_id, prompt, context, task_hint, attachments),
                 daemon=True,
             ).start()
 
@@ -345,6 +451,7 @@ def _answer_request(
     prompt: str,
     context: Optional[dict],
     task_hint: Any,
+    attachments: Optional[list[dict]] = None,
 ):
     started = time.perf_counter()
     api_key, cost_bias = settings.snapshot()
@@ -358,7 +465,7 @@ def _answer_request(
         return
 
     try:
-        text = call_gemini(api_key, model, prompt, context)
+        text = call_gemini(api_key, model, prompt, context, attachments)
     except (urllib.error.URLError, RuntimeError, ValueError) as exc:
         print(f"[{name}] Gemini call failed for entity {entity}: {exc!r}")
         world.set_attribute(

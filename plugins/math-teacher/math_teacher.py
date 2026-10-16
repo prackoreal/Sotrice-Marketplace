@@ -109,7 +109,21 @@ make it actually test whether a student can tell a plausible wrong
 answer from the right one, same reason multiple_choice's own wrong
 options exist. Capped at MAX_DISTRACTORS, empty/None means no
 distractors, same "missing means the plain, unextended case" posture as
-everything else optional in this shape). Exactly the fields its own
+everything else optional in this shape). "ai_answer" (None | {"rationale": str | None,
+"model": str | None} — present only while this question's answer key
+(correct_index/correct_indices/accepted_answers) was filled in by an AI
+(lama_bank.py's keying pass) and a teacher hasn't looked at it yet. While
+it is set the question is NOT graded -- an unverified key never decides a
+student's score: grade_answer skips it and publish_tally counts its
+answers as awaiting review (free_response: [0, 0, n]). Accepting it
+grades the answers already given this round. Also drives the authoring
+UI's "AI answer — check it" marker. Cleared by "accept_ai_answer" (or the
+bulk "accept_ai_answers"), and
+implicitly by any "edit_question" (the editor re-sends the whole
+question without it, which IS the teacher having looked at it). Never
+part of a student-facing entity: _round_entry below copies only grading
+fields, so a student's connection never sees it, same as the answer key
+itself). Exactly the fields its own
 type uses are ever meaningful; every OTHER type-specific field is
 simply None on that question, never omitted (a consumer can always do
 question["correct_indices"] without a KeyError, even on a
@@ -246,10 +260,13 @@ Entities published:
       every field" posture the module docstring's "Question shape"
       section already has.
     answer_tally (list[int]) — mirrors the DEFAULT_TIER tally. For a
-      free_response or matching_pair question this is [correct_count,
-      incorrect_count] (matching_pair's "correct" meaning an exact,
-      fully-matched submission — see grade_answer) instead of one entry
-      per option; multi_select is one count per option of how many
+      matching_pair question this is [correct_count, incorrect_count]
+      (matching_pair's "correct" meaning an exact, fully-matched
+      submission — see grade_answer) instead of one entry per option; a
+      free_response is [correct, incorrect, awaiting_review] — a question
+      with no answer key can't be graded, so its answers count as
+      awaiting review (never incorrect); consumers that only sum the
+      list still get the number of answers; multi_select is one count per option of how many
       students included it in their own selection (not mutually
       exclusive the way multiple_choice's is, since a student can pick
       more than one) — same list[int] SHAPE in every case (never a type
@@ -451,6 +468,7 @@ import json
 import math
 import os
 import random
+import re
 import shutil
 import time
 import uuid
@@ -682,6 +700,10 @@ MAX_OPTION_LENGTH = 200
 MAX_ACCEPTED_ANSWERS = MAX_OPTIONS
 MAX_ACCEPTED_ANSWER_LENGTH = MAX_OPTION_LENGTH
 MAX_HINT_LENGTH = 300
+# ai_answer's own bounds (see the module docstring's "Question shape") --
+# a one-or-two sentence rationale and a model name, never a transcript.
+MAX_AI_RATIONALE_LENGTH = 400
+MAX_AI_MODEL_LENGTH = 80
 # matching_pair's own bounds — reuses MAX_OPTION_LENGTH for each side's
 # text (same realistic size as any other short answer/label in this
 # file). MIN_PAIRS = 2 because a "matching" question with fewer than two
@@ -807,12 +829,47 @@ def persist_new_class(code: str, class_display_name: str, question_bank: list[di
     append_to_index(code, class_display_name)
 
 
+# Free-response keys that LaMa PDF extraction mangled ("√x 5 2", "m 4x",
+# "x 6 z y 15 − 9 · ...") can never be typed by a student, so every correct
+# answer would be graded "incorrect". Older versions imported them as real
+# keys; this one-time audit (recorded as "key_audit" in questions.json, so a
+# teacher who later types such an answer on purpose is never overridden)
+# drops them back to "no key" -- ungraded, awaiting the teacher's review.
+# Deliberately narrow: only answers that are not plain numbers AND carry an
+# extraction fingerprint (a Unicode minus/root/dot operator, or a letter
+# followed by a detached digit) -- a teacher's own "Paris" or "x = 5" stays.
+KEY_AUDIT_VERSION = 1
+_NUMERIC_KEY_RE = re.compile(r"^-?\d+([.,]\d+)?$")
+_EXTRACTION_GARBLE_RE = re.compile(r"[\u2212\u221a\u00b7]|[A-Za-z]\s+\d")
+
+
+def looks_extraction_garbled(answer: str) -> bool:
+    compact = answer.strip().replace(" ", "")
+    if _NUMERIC_KEY_RE.match(compact):
+        return False
+    return bool(_EXTRACTION_GARBLE_RE.search(answer))
+
+
+def audit_garbled_keys(bank: list[dict]) -> bool:
+    """In place. Returns True when anything changed."""
+    changed = False
+    for i, q in enumerate(bank):
+        accepted = q.get("accepted_answers")
+        if q.get("type") != "free_response" or q.get("ai_answer") or not accepted:
+            continue
+        kept = [a for a in accepted if not looks_extraction_garbled(a)]
+        if len(kept) != len(accepted):
+            bank[i] = {**q, "accepted_answers": kept or None}
+            changed = True
+    return changed
+
+
 def save_questions(code: str, question_bank: list[dict]) -> None:
     """Rewrites questions.json wholesale — called after every authoring
     mutation (see on_authoring_command); cheap enough at this scale (at
     most MAX_QUESTIONS_PER_CLASS entries) that a real read-modify-write
     diff isn't worth the complexity."""
-    _write_json(class_dir_for(code) / "questions.json", {"questions": question_bank})
+    _write_json(class_dir_for(code) / "questions.json", {"questions": question_bank, "key_audit": KEY_AUDIT_VERSION})
 
 
 def save_chapters(code: str, chapters: list[dict], active_chapter: str | None) -> None:
@@ -918,7 +975,19 @@ def migrate_question_bank(raw) -> list[dict]:
         # for any entry saved before it existed, same "missing means the
         # old, unaffected behavior" posture as every other field this
         # migration function has ever had to backfill.
-        return [{**q, "points": q.get("points", DEFAULT_POINTS)} for q in raw["questions"] if _valid_question(q)]
+        # "ai_answer" is newer still (see "Question shape") -- same
+        # backfill, and anything that isn't the documented object shape
+        # (a hand-edited file) is dropped to None rather than handed to a
+        # UI that would have to defend against it.
+        return [
+            {
+                **q,
+                "points": q.get("points", DEFAULT_POINTS),
+                "ai_answer": q["ai_answer"] if isinstance(q.get("ai_answer"), dict) else None,
+            }
+            for q in raw["questions"]
+            if _valid_question(q)
+        ]
 
     migrated: list[dict] = []
     if isinstance(raw, dict):
@@ -978,7 +1047,11 @@ def load_class_bundle(code: str) -> dict | None:
     meta = _read_json(class_dir / "meta.json", None)
     if not isinstance(meta, dict):
         return None
-    bank = heal_question_bank(migrate_question_bank(_read_json(class_dir / "questions.json", {})))
+    raw_questions = _read_json(class_dir / "questions.json", {})
+    bank = heal_question_bank(migrate_question_bank(raw_questions))
+    if not (isinstance(raw_questions, dict) and raw_questions.get("key_audit") == KEY_AUDIT_VERSION):
+        audit_garbled_keys(bank)
+        save_questions(code, bank)  # stamps key_audit so this runs once per class
 
     materials = _read_json(class_dir / "materials.json", {})
     chapters_raw = materials.get("chapters") if isinstance(materials, dict) else None
@@ -1013,6 +1086,9 @@ def load_class_bundle(code: str) -> dict | None:
     return {"class_name": class_display_name, "questions": bank, "chapters": chapters, "active_chapter": active_chapter}
 
 
+_DECIMAL_COMMA_RE = re.compile(r"^([+-]?\d+),(\d+)$")
+
+
 def normalize_answer(raw: str) -> str:
     """Plain string/numeric equivalence, never an AI/model call (see
     the module docstring) — "12", "12.0", and "12.00" all normalize to
@@ -1022,6 +1098,13 @@ def normalize_answer(raw: str) -> str:
     own accepted_answers before comparing, so grade_answer never has to
     duplicate this logic."""
     trimmed = raw.strip()
+    # Austrian students write 1,5 for 1.5. One comma between digits is a
+    # decimal point -- except exactly three digits after it ("1,000",
+    # "12,345"), which is ambiguous with a thousands separator and is left
+    # alone (it then compares as plain text, never silently as a number).
+    comma = _DECIMAL_COMMA_RE.match(trimmed)
+    if comma and len(comma.group(2)) != 3:
+        trimmed = f"{comma.group(1)}.{comma.group(2)}"
     try:
         value = float(trimmed)
     except ValueError:
@@ -1238,6 +1321,8 @@ with World() as world:
         multi_select is not a "correct answer" for either purpose.
         """
         bank = current_bank_by_tier[tier]
+        if bank.get("ai_answer"):
+            return  # AI-drafted key not accepted yet: awaiting the teacher's review, never graded
         points = bank["points"]
         if bank["type"] == "multiple_choice":
             correct_index = bank["correct_index"]
@@ -1366,7 +1451,8 @@ with World() as world:
         # interpretation per type: multiple_choice is one count per
         # option index; multi_select is likewise one count per option,
         # but NOT mutually exclusive (a student's own selection can set
-        # more than one); free_response and matching_pair are both
+        # more than one); free_response is
+        # [correct, incorrect, awaiting_review] and matching_pair is
         # [correct_count, incorrect_count] — correctness re-derived here
         # from the question's own answer key rather than cached, since
         # nothing about this aggregate reveals what the right answer WAS
@@ -1397,9 +1483,16 @@ with World() as world:
                 )
                 tally_by_tier[tier] = [correct, len(records) - correct]
             else:  # free_response
+                # [correct, incorrect, awaiting_review]: a question with no
+                # answer key can't be graded, so its answers are "awaiting
+                # review" -- never counted as wrong.
                 accepted = {normalize_answer(a) for a in (bank["accepted_answers"] or [])}
-                correct = sum(1 for r in records if r["text"] is not None and accepted and normalize_answer(r["text"]) in accepted)
-                tally_by_tier[tier] = [correct, len(records) - correct]
+                answered = [r for r in records if r["text"] is not None]
+                if not accepted or bank.get("ai_answer"):
+                    tally_by_tier[tier] = [0, 0, len(answered)]
+                else:
+                    correct = sum(1 for r in answered if normalize_answer(r["text"]) in accepted)
+                    tally_by_tier[tier] = [correct, len(answered) - correct, 0]
         mirror_tier = DEFAULT_TIER if DEFAULT_TIER in tally_by_tier else current_active_tiers[0]
         world.set_many([
             (control, class_attr("answer_tally_by_tier"), tally_by_tier),
@@ -1489,6 +1582,10 @@ with World() as world:
             "correct_index": q.get("correct_index"),
             "accepted_answers": q.get("accepted_answers"),
             "correct_indices": q.get("correct_indices"),
+            "id": q.get("id"),
+            # An AI-drafted key the teacher hasn't accepted is NOT a key:
+            # grade_answer/publish_tally treat the question as awaiting review.
+            "ai_answer": q.get("ai_answer"),
             "source": source,
         }
         if q["type"] == "matching_pair":
@@ -1543,6 +1640,35 @@ with World() as world:
                 del answers_by_student[entity]
         publish_current_round()
         publish_tally()
+
+    def accept_ai_answers(qids: list[str]) -> list[str]:
+        """Clears the "ai_answer" marker on each of `qids` (still in the
+        bank, still marked) and returns the ids that were actually
+        accepted. If one is the question CURRENTLY up, its round entry is
+        updated too and every answer already given to it is graded now --
+        otherwise accepting would only help students from the next round."""
+        accepted_ids: list[str] = []
+        known_ids = {q["id"] for q in class_question_bank}
+        for qid in qids:
+            if qid not in known_ids:
+                continue
+            index = next(i for i, q in enumerate(class_question_bank) if q["id"] == qid)
+            if class_question_bank[index].get("ai_answer") is None:
+                continue
+            class_question_bank[index] = {**class_question_bank[index], "ai_answer": None}
+            accepted_ids.append(qid)
+        regraded = False
+        for tier, entry in current_bank_by_tier.items():
+            if entry.get("id") in accepted_ids and entry.get("ai_answer"):
+                entry["ai_answer"] = None
+                for student, record in list(answers_by_student.items()):
+                    if record["tier"] == tier:
+                        grade_answer(student, tier, record["option"], record["text"], record["selected"], record["pairs"])
+                regraded = True
+        if regraded:
+            publish_tally()
+            publish_student_state()
+        return accepted_ids
 
     def on_answer(entity, attribute, value, source):
         # Trust nothing about this payload's shape or contents — it
@@ -1763,7 +1889,7 @@ with World() as world:
         same rules apply no matter which way a question's content
         arrives. Returns ({"type", "text", "hint", "points", "options",
         "correct_index", "accepted_answers", "correct_indices", "pairs",
-        "distractors"} (every key always present, None for whichever the
+        "distractors", "ai_answer"} (every key always present, None for whichever the
         type doesn't use — see the module docstring's "Question shape"
         section), None) on success, or (None, "<human-readable reason>")
         if anything at all is invalid — every caller besides
@@ -1783,10 +1909,22 @@ with World() as world:
         if isinstance(points, bool) or not isinstance(points, int) or not (1 <= points <= MAX_POINTS):
             return None, f"\"points\" must be an int between 1 and {MAX_POINTS}"
 
+        ai_answer = value.get("ai_answer")
+        if ai_answer is not None:
+            if not isinstance(ai_answer, dict):
+                return None, "\"ai_answer\" must be null or an object"
+            rationale, model = ai_answer.get("rationale"), ai_answer.get("model")
+            if rationale is not None and (not isinstance(rationale, str) or len(rationale) > MAX_AI_RATIONALE_LENGTH):
+                return None, "\"ai_answer.rationale\" is too long"
+            if model is not None and (not isinstance(model, str) or len(model) > MAX_AI_MODEL_LENGTH):
+                return None, "\"ai_answer.model\" is too long"
+            ai_answer = {"rationale": rationale, "model": model}
+
         base = {
             "type": type_, "text": text, "hint": hint, "points": points,
             "options": None, "correct_index": None, "accepted_answers": None,
             "correct_indices": None, "pairs": None, "distractors": None,
+            "ai_answer": ai_answer,
         }
 
         if type_ == "multiple_choice":
@@ -1943,6 +2081,12 @@ with World() as world:
             questions (see questions_for_tier) — delete/recreate a
             tier's last question if that's really the intent, don't
             silently leave live rotation with nothing to draw from.
+          "accept_ai_answer" — {"id"} clears that question's "ai_answer"
+            marker (see "Question shape") — the teacher's one-click
+            "I checked it" — and grades the answers already given to it
+            if it is the question currently up. No-op if no marker.
+          "accept_ai_answers" — {"ids": [id, ...]} the same for many at
+            once (a whole PDF in one pass).
           "delete_question" — {"id"} removes it from the bank AND from
             every chapter's question_ids — same "refuse if it's the
             last one in its tier" guard as edit_question above.
@@ -2035,6 +2179,24 @@ with World() as world:
             class_question_bank[index] = {"id": qid, "tier": new_tier, **content}
             save_questions(class_code, class_question_bank)
             publish_authoring_state()
+
+        elif cmd in ("accept_ai_answer", "accept_ai_answers"):
+            # "AI answer -- check it": the teacher looked at the AI-filled
+            # answer key and accepts it. Until then the question is NOT
+            # graded (awaiting review, see grade_answer); accepting clears
+            # the marker AND grades the answers students already gave to
+            # it this round. accept_ai_answers is the bulk form (a whole
+            # PDF in one pass) -- {"ids": [...]}, capped like an import.
+            if cmd == "accept_ai_answer":
+                ids = [value.get("id")]
+            else:
+                ids = value.get("ids")
+                if not isinstance(ids, list) or len(ids) > MAX_IMPORT_PER_REQUEST * 5:
+                    return
+            accepted_ids = accept_ai_answers([qid for qid in ids if isinstance(qid, str)])
+            if accepted_ids:
+                save_questions(class_code, class_question_bank)
+                publish_authoring_state()
 
         elif cmd == "delete_question":
             qid = value.get("id")
