@@ -180,7 +180,7 @@
   "packages": [
     {
       "name": "Math Plugin",
-      "version": "0.4.10",
+      "version": "0.4.11",
       "description": "A teacher runs a real math class (multiple choice, free response, multi-select, matching-pair with distractors, adaptive difficulty, streaks, an opt-in scoreboard, live mid-session editing, per-class identity, persistence across restarts) and a real student joins by code from their own device to answer live. The math-student testing bot, the 2D/3D graphing calculator, and the LaMa worksheet bank (lama-bank) are all separate, optional companions listed under \"Math companions\" below -- install any of them individually if you want them; none come bundled in by default.",
       "includes": [
         "math-teacher",
@@ -189,8 +189,8 @@
     },
     {
       "name": "Sotrice City Simulator",
-      "version": "0.2.0",
-      "description": "A small synthetic-physics + real-OpenStreetMap city simulation, staged as six separate spins: physics-test (synthetic falling/colliding bodies), agent-behavior-test (walkers/vehicles that pathfind along real roads), city-roads and city-buildings (a real, small OpenStreetMap extract of central Klosterneuburg, Austria), economics-test (derived per-building data like traffic visit counts), and rendering-test (a real three.js/Cesium viewer with click-to-inspect on every entity). Install all six together to see the full picture; each is still individually listed and manageable.",
+      "version": "0.3.0",
+      "description": "A real city simulation for any place on Earth: pick a place and get real OpenStreetMap streets, buildings, terrain, tunnels and subway lines, with cars, pedestrians, trams and trains moving on the real network. Fly or walk around in 3D, 2D or street view, edit buildings by hand, voice or the city AI, and toggle every layer. Includes the city data, roads, buildings, traffic and agent sims, the 3D viewer and the AI spin.",
       "includes": [
         "city-data",
         "physics-test",
