@@ -1,0 +1,33 @@
+{
+  "_comment": "Curated, hand-picked area definitions for scripts/extract_city_roads.py and extract_city_buildings.py --area <id>. Any id NOT listed here is instead resolved dynamically: as a raw 'south,west,north,east' bbox if it parses as four floats, or as a real place name geocoded via Nominatim otherwise (see scripts/city_area.py). This registry only needs entries for areas worth re-running/re-verifying by a short, memorable name.",
+  "areas": {
+    "klosterneuburg_center": {
+      "name": "Central Klosterneuburg, Austria",
+      "bbox": {
+        "south": 48.3,
+        "west": 16.3195,
+        "north": 48.3108,
+        "east": 16.3355
+      },
+      "description": "A few real city blocks around central Klosterneuburg, Austria",
+      "default_agent_count": 8
+    },
+    "vienna_stephansplatz_karlsplatz": {
+      "name": "Vienna: Stephansplatz to Karlsplatz",
+      "bbox": {
+        "south": 48.1985,
+        "west": 16.36,
+        "north": 48.2125,
+        "east": 16.385
+      },
+      "description": "Dense old town: U1/U2/U4 underground, trams, 1600+ buildings (real OpenStreetMap data, fetched on demand)",
+      "default_agent_count": 40
+    },
+    "korneuburg_hauptplatz__austria": {
+      "name": "Korneuburg Hauptplatz, Austria",
+      "bbox": { "south": 48.34264525770751, "west": 16.331798415123355, "north": 48.344621542292494, "east": 16.334771784876647 },
+      "description": "About 220 m around Korneuburg Hauptplatz, Austria",
+      "default_agent_count": 8
+    }
+  }
+}

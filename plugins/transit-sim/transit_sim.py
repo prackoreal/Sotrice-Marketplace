@@ -33,6 +33,8 @@ from collections import defaultdict
 
 from sotrice_client import World
 
+import city_sim
+
 TICK_HZ = 10.0
 
 # Constant cruising speed per underground transport mode -- deliberately
@@ -154,7 +156,22 @@ def main():
 
         shuttles: dict[int, Shuttle] = {}
 
+        # REAL rail (city-data schema v1): one service per (mode, ref) from city_rail.lines, ping-pong along the
+        # relation's path, stopping at its real stops, underground where the line is. The synthetic shuttles
+        # below only run when the area has no city_rail at all (the labelled custom/demo fallback).
+        rail_state = {"lines": None, "rebuild": False, "services": [], "pool": [], "guards": city_sim.Guards()}
+
+        def on_city_rail(entity, attribute, value, source):
+            lines = (value or {}).get("lines") or []
+            rail_state["lines"] = lines
+            rail_state["rebuild"] = True
+
+        world.subscribe("city_rail", on_city_rail, replay=True)
+        time.sleep(1.0)  # let the replay land before deciding real vs synthetic
+
         def on_road_network(entity, attribute, value, source):
+            if rail_state["lines"]:
+                return  # real rail present: no synthetic shuttles
             lines = underground_lines(value.get("nodes", {}), value.get("edges", []))
             if not lines:
                 print(f"[{name}] no underground lines/tunnels in the current road_network yet — idle")
@@ -173,9 +190,66 @@ def main():
         world.subscribe("road_network", on_road_network, replay=True)
 
         print(f"[{name}] running at {TICK_HZ}Hz — Ctrl+C to stop")
-        dt = 1.0 / TICK_HZ
+        base_dt = 1.0 / TICK_HZ
+        # Compute mode (Efficiency/Performance/Adaptive): fewer, larger steps at a
+        # lower update-rate budget -- same speed along the line, less work.
+        compute = world.compute_mode("transit-sim")
+        guard_control = world.create_entity()
+        world.set_attribute(guard_control, "kind", "transit_guard_control")
+        tick_no = 0
+        last_pub: dict[int, tuple] = {}
+
+        def rebuild_services() -> None:
+            for old in rail_state["services"]:
+                world.set_attribute(old.entity, "kind", "retired")
+                rail_state["pool"].append(old.entity)
+                last_pub.pop(old.entity, None)
+
+            def new_entity() -> int:
+                if rail_state["pool"]:
+                    return rail_state["pool"].pop()
+                e = world.create_entity()
+                world.set_attribute(e, "agent_type", "vehicle")
+                return e
+
+            rail_state["services"] = city_sim.build_train_services(rail_state["lines"], new_entity)
+            for tr in rail_state["services"]:
+                world.set_attribute(tr.entity, "kind", "agent")
+                world.set_attribute(tr.entity, "vehicle_kind", tr.vehicle_kind)
+                world.set_attribute(tr.entity, "transit_line", {"mode": tr.mode, "ref": tr.ref, "colour": tr.colour})
+            print(f"[{name}] real rail: {len(rail_state['services'])} train(s) on {len({(t.mode, t.ref) for t in rail_state['services']})} line(s)", flush=True)
+
         try:
             while True:
+                dt = compute.interval(base_dt)
+                if rail_state["rebuild"]:
+                    rail_state["rebuild"] = False
+                    rebuild_services()
+                if rail_state["services"]:
+                    tick_no += 1
+                    updates = []
+                    for tr in rail_state["services"]:
+                        tr.step(dt)
+                        reason = tr.check(rail_state["guards"])
+                        if reason:
+                            rail_state["guards"]._hit(f"train {tr.entity}", reason)
+                            tr.sample()   # repair: re-derive the position from the track itself
+                            rail_state["guards"].stats.repairs += 1
+                        y = round(tr.y_abs + tr.y_off, 2)
+                        pub = (round(tr.x, 2), y, round(tr.z, 2))
+                        if last_pub.get(tr.entity) != pub:
+                            last_pub[tr.entity] = pub
+                            updates.append((tr.entity, "position", {"x": pub[0], "y": pub[1], "z": pub[2]}))
+                            updates.append((tr.entity, "orientation", city_sim.yaw_quaternion(tr.hx, tr.hz)))
+                        key = (tr.state, tr.stop_name)
+                        if last_pub.get((tr.entity, "st")) != key:
+                            last_pub[(tr.entity, "st")] = key
+                            updates.append((tr.entity, "agent_state", tr.state))
+                            updates.append((tr.entity, "transit_stop", tr.stop_name))
+                    if updates:
+                        world.set_many(updates)
+                    if tick_no % 20 == 0:
+                        world.set_attribute(guard_control, "agent_guard_stats", rail_state["guards"].stats.as_dict())
                 for entity, shuttle in shuttles.items():
                     x, y, z = shuttle.step(dt)
                     world.set_attribute(entity, "position", {"x": x, "y": y, "z": z})

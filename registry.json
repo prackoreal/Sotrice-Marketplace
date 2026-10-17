@@ -3,7 +3,7 @@
   "plugins": [
     {
       "type": "math-teacher",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "description": "Runs a math class: a real question-authoring UI (multiple choice, free response, multi-select, matching-pair with distractors), adaptive per-student difficulty (off by default; teacher-toggleable automatic/manual, asymmetric -- 3-in-a-row correct to move up a tier, 2-in-a-row wrong to move down), a correctness streak and opt-in scoreboard per student, live mid-session editing via a teacher_command control attribute, a per-class identity (class_code/class_name) so more than one class can run on the same machine without their data mixing, and persistence -- a class's identity, roster, and question bank survive the process exiting, and can be resumed later. LaMa catalog imports can file into a brand-new chapter or reuse an already-saved one. Install math-student alongside it, or have a real student join by code from their own device, to see the tally move.",
       "concepts": [
         "MathClass"
@@ -14,7 +14,7 @@
     },
     {
       "type": "math-student",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "description": "One simulated student in a math-teacher class, for same-machine testing: watches its assigned question (tiered if the teacher's adaptive difficulty is on) and answers after a short random 'thinking' delay. A REAL student doesn't install this -- they join a live class by code from math-teacher's own UI, which answers all four question types (multiple choice, free response, multi-select, matching-pair by click or drag-and-drop) for real. Install several instances of this bot to populate math-teacher's live tally for testing without real students.",
       "concepts": [
         "Students"
@@ -28,7 +28,7 @@
     },
     {
       "type": "graphing",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "description": "A 2D/3D graphing calculator, Desmos/GeoGebra-style. Plot one or more functions (pan/zoom) or a 3D surface (orbit/zoom) by writing plain math expressions to its \"graphs\" attribute -- usable standalone, or driven by another plugin over Core the same way city-routing feeds city-residents a route.",
       "concepts": [
         "Graphing"
@@ -40,7 +40,7 @@
     },
     {
       "type": "lama-bank",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "description": "A headless companion plugin for math-teacher, same relationship city-weather has to city-layout: watches a folder of real LaMa (CC BY 3.0) worksheet PDFs, parses them into a browsable catalog of ready-to-use questions (metadata only -- titel/Grundkompetenz/Klasse/Quelle/Aufgabenformat -- never the full question content until it's actually filed into a class), and files a chosen subset into a live math-teacher class's own bank through the exact same authoring_command import channel a human-driven import already uses. Not a UI of any kind -- install it alongside math-teacher and drive it from math-teacher's own LaMa upload panel.",
       "concepts": [
         "LaMaBank"
@@ -54,7 +54,7 @@
     },
     {
       "type": "ai-test",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "description": "Universal AI spin — one domain-agnostic request/response mechanism shared by the math spin's AI tab and, later, a city spin's own analyst UI, per the same 'one shared engine, two presentations' design already used for compute plugins elsewhere. Watches any entity's ai_request attribute (prompt + optional context payload + optional request_id/task_hint, no enumeration, pure subscribe-by-name) and calls the real Gemini API (gemini-3.8-flash capable / gemini-3.1-flash-lite budget, automatic per-request selection), writing an ai_response attribute back onto that same entity. Has no idea which spin, if any, is asking. Ships its own Settings UI (ai-test-ui) for the real per-user Gemini API key and cost/quality bias, falling back to a dev-only local-secrets key when neither has ever been set.",
       "concepts": [
         "UniversalAI"
@@ -66,7 +66,7 @@
     },
     {
       "type": "physics-test",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "description": "Physics spin skeleton — synthetic test scene only (a handful of boxes/spheres falling and colliding), own fixed-timestep loop, uniform-grid broad-phase collision, double-precision coordinates, LOD via a stubbed active_viewpoint. Not real map data — that's a separate, later spin.",
       "concepts": [
         "Physics"
@@ -77,7 +77,7 @@
     },
     {
       "type": "agent-behavior-test",
-      "version": "0.3.1",
+      "version": "0.4.0",
       "description": "Agent-behavior spin skeleton — the next layer on top of physics-test's synthetic scene. Watches physics-test's published position/physics_lod_tier per entity (no enumeration, pure subscribe-by-name). If city-roads' real OSM road network is available, pathfinds (Dijkstra) to a real destination and walks the actual route; otherwise falls back to picking a random nearby point. Publishes desired_target, which physics-test's own steering (if running) consumes — this file has no idea whether anything is actually listening.",
       "concepts": [
         "AgentBehavior"
@@ -90,7 +90,7 @@
     },
     {
       "type": "city-roads",
-      "version": "0.1.1",
+      "version": "0.2.0",
       "description": "A real, minimal road-network data source — a few real city blocks around central Klosterneuburg, Austria, extracted from OpenStreetMap (see scripts/extract_city_roads.py in the main Sotrice repo). Publishes the routable node/edge graph as a bare road_network attribute for anything to consume (agent-behavior-test uses it for real pathfinding), plus a real road_attribution string (© OpenStreetMap contributors, ODbL — real attribution is required wherever this data is displayed). Not the photorealistic-building/3D-Tiles problem — no building geometry, just the road network.",
       "concepts": [
         "CityRoads"
@@ -103,7 +103,7 @@
     },
     {
       "type": "city-buildings",
-      "version": "0.2.1",
+      "version": "0.3.0",
       "description": "A real, minimal building-footprint data source — the same small Klosterneuburg area city-roads covers, aligned to the same coordinate origin. Publishes one entity per real OSM building (footprint polygon, ground position, height — real where tagged, a documented estimate where not) plus a real building_attribution string. Keyless, free, ODbL OSM data only — NOT the photorealistic Google 3D Tiles/Cesium ingestion, which needs a real external account/API key decision.",
       "concepts": [
         "CityBuildings"
@@ -114,7 +114,7 @@
     },
     {
       "type": "economics-test",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "description": "Economics spin skeleton — proves the wiring, not a real economic model yet. Watches city-buildings' building_position/building_type/building_goods_price_eur and city-roads' road_network (no enumeration, pure subscribe-by-name) and publishes back onto each building's OWN entity: building_road_distance_m/building_nearest_road_name (real, static, distance to the nearest real road node), building_traffic_visits_count (a real counter of how often any other entity's position comes within range, with a per-mover cooldown), and building_revenue_estimate_eur (price times traffic, for buildings whose type is \"shop\" and that have a price set — the first real per-building editable-economics metric). Has no idea whether city-roads/city-buildings/physics-test are even running.",
       "concepts": [
         "Economics"
@@ -128,7 +128,7 @@
     },
     {
       "type": "rendering-test",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "description": "Rendering spin for the city simulation: a real three.js spin-ui:// viewer for physics-test's synthetic scene (subscribes to position/orientation/physics_lod_tier/shape/radius/half_extents, no enumeration, pure subscribe-by-name), with one real adaptive-fidelity mechanism (full geometry for 'full' LOD tier bodies, cheap impostors for 'kinematic' tier bodies) and its own settings panel (quality preset, DXGI-enumerated compute device choice, remote-compute stub, city area picker, Cesium ion token, grid line color). Also draws city-roads/city-buildings' real OpenStreetMap Klosterneuburg extract (real road lines, basic extruded building footprints, AI-classified wall materials) plus agent-behavior-test's own moving walker/vehicle markers. Three switchable views, each a real Core-backed render_settings.view_mode (survives reload): a vector scene, a Photorealistic mode with real Google Photorealistic 3D Tiles via CesiumJS + a user's own Cesium ion token, and a new Grid view (pure wireframe/edges-only, one configurable line color) with real drag-to-move building repositioning that regenerates affected roads live. Every building, agent, and physics body in the scene is click-selectable (a real raycast against each one's own mesh) and opens a generic property-inspector panel listing EVERY real Core attribute that entity currently has, editable in place. Includes a built-in AI analyst panel (ai-test request/response round trip) for asking real questions about the live city data (traffic, materials, road proximity) with user-toggleable context layers. Not the eventual GTA6-style adaptive renderer — no ray tracing, no temporal denoising.",
       "concepts": [
         "Rendering"
@@ -143,7 +143,7 @@
     },
     {
       "type": "transit-sim",
-      "version": "0.1.1",
+      "version": "0.2.0",
       "description": "Animates city-roads' synthetic underground layer: watches the published road_network for underground (layer=\"underground\") edges, groups them by transport_mode/name, and spawns one shuttle entity per line/tunnel found, ping-ponging it back and forth along that line's own node sequence forever. Publishes the same kind/agent_type shape agent-behavior-test's own vehicle agents use, plus a new vehicle_kind (\"subway_wagon\"/\"car\") rendering-test-ui uses to pick a real subway-wagon/car silhouette. Has no idea how many underground lines exist or where -- discovers everything purely from the published attribute, same as every other watch/write plugin here.",
       "concepts": [
         "TransitSim"
@@ -156,7 +156,7 @@
     },
     {
       "type": "latin-stammformen",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "Stammformen Trainer: a Latin principal-parts trainer. Flashcards (flip, swipe, keyboard), a typed self-test that is forgiving about accents, commas and spacing but strict about the forms, and a searchable list, over a vocabulary list you import yourself (the spin ships empty -- bring a backup file of this spin or a verb page you already have). Chapter groups come from the lessons in your list, with per-lesson switches, core-verb and conjugation filters, a mastered counter, your own groups, bulk paste and a photo/PDF scan that reads a printed word list through the AI spin with your own Gemini key (needs ai-test 0.1.2 or newer; the page never holds a key). Your list, progress and test history are stored in Sotrice's data folder, outside the spin, so updating or reinstalling it never touches them; export and import as JSON.",
       "concepts": [
         "LatinTrainer"
@@ -164,12 +164,23 @@
       "depends_on": [],
       "author": "prackoreal",
       "file": "latin-stammformen.spin"
+    },
+    {
+      "type": "city-data",
+      "version": "0.1.0",
+      "description": "Real city data for any place on Earth. Searches a place by name (Nominatim), downloads its OpenStreetMap roads, rail/subway/tram lines and stations, buildings, ground, POIs and terrain (Overpass mirrors with fallback + AWS terrain tiles), caches it per area (instant and offline the second time) and publishes it as schema-v1 city attributes: a control entity (city_dataset, city_progress, city_terrain, city_rail, city_road_graph, city_surfaces) plus one entity per 500 m tile (ct_roads, ct_buildings, ct_ground, ct_pois, ct_rail_ways). Area changes live via city_area_request / city_area_cancel; material overrides from the looks pipeline via city_surface_patch. Data (c) OpenStreetMap contributors, ODbL.",
+      "concepts": [
+        "CityData"
+      ],
+      "depends_on": [],
+      "author": "sotrice-core-design",
+      "file": "city-data.spin"
     }
   ],
   "packages": [
     {
       "name": "Math Plugin",
-      "version": "0.4.9",
+      "version": "0.4.10",
       "description": "A teacher runs a real math class (multiple choice, free response, multi-select, matching-pair with distractors, adaptive difficulty, streaks, an opt-in scoreboard, live mid-session editing, per-class identity, persistence across restarts) and a real student joins by code from their own device to answer live. The math-student testing bot, the 2D/3D graphing calculator, and the LaMa worksheet bank (lama-bank) are all separate, optional companions listed under \"Math companions\" below -- install any of them individually if you want them; none come bundled in by default.",
       "includes": [
         "math-teacher",
@@ -178,9 +189,10 @@
     },
     {
       "name": "Sotrice City Simulator",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "A small synthetic-physics + real-OpenStreetMap city simulation, staged as six separate spins: physics-test (synthetic falling/colliding bodies), agent-behavior-test (walkers/vehicles that pathfind along real roads), city-roads and city-buildings (a real, small OpenStreetMap extract of central Klosterneuburg, Austria), economics-test (derived per-building data like traffic visit counts), and rendering-test (a real three.js/Cesium viewer with click-to-inspect on every entity). Install all six together to see the full picture; each is still individually listed and manageable.",
       "includes": [
+        "city-data",
         "physics-test",
         "city-roads",
         "city-buildings",

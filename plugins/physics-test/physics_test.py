@@ -468,6 +468,7 @@ def main():
         last_time = time.perf_counter()
 
         print(f"[{name}] running {len(bodies)} bodies at {PHYSICS_TICK_RATE}Hz — Ctrl+C to stop")
+        compute = world.compute_mode("physics-test")
         try:
             while True:
                 now = time.perf_counter()
@@ -529,8 +530,13 @@ def main():
                     updates.append((body.entity, "position", {"x": body.position[0], "y": body.position[1], "z": body.position[2]}))
                     updates.append((body.entity, "velocity", {"x": body.velocity[0], "y": body.velocity[1], "z": body.velocity[2]}))
                     updates.append((body.entity, "orientation", {"x": body.orientation[0], "y": body.orientation[1], "z": body.orientation[2], "w": body.orientation[3]}))
-                    updates.append((body.entity, "contact_state", body.contact_state))
-                    updates.append((body.entity, "physics_lod_tier", body.tier))
+                    # contact_state and the LOD tier are states, not streams: publish
+                    # on change only (they were re-sent every tick, ~3k pushes/s).
+                    if body.contact_state != getattr(body, "last_published_contact", None):
+                        updates.append((body.entity, "contact_state", body.contact_state))
+                        body.last_published_contact = body.contact_state
+                    if body.tier != body.last_published_tier:
+                        updates.append((body.entity, "physics_lod_tier", body.tier))
                     body.last_published_tier = body.tier
 
                 world.set_many(updates)
@@ -539,7 +545,10 @@ def main():
                 # be due, rather than a fixed sleep(FIXED_DT) — keeps this
                 # loop's own overhead from silently adding drift on top of
                 # the accumulator's real-time tracking.
-                remaining = FIXED_DT - accumulator
+                # Compute mode: a lower update-rate budget publishes less often;
+                # the accumulator above catches the simulation up in exact
+                # FIXED_DT steps, so simulated time still tracks real time.
+                remaining = compute.interval(FIXED_DT) - accumulator
                 if remaining > 0:
                     time.sleep(remaining)
         except KeyboardInterrupt:

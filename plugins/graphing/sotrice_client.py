@@ -215,6 +215,47 @@ def _decode_binary_batch(payload: bytes) -> list[dict[str, Any]]:
     return updates
 
 
+class ComputeMode:
+    """Live view of the compute-mode state for one plugin type (Efficiency /
+    Performance / Adaptive; contract: C:/st/compute-mode/README.md). Backed by
+    the `compute_mode` Core attribute the Sotrice app publishes. Until a value
+    arrives (headless run, no app attached) the defaults apply: full rate."""
+
+    def __init__(self, plugin_type: str) -> None:
+        self.plugin_type = plugin_type
+        self.requested = "adaptive"
+        self.level = 1.0
+        self.update_rate_scale = 1.0
+        self.detail = 1.0
+        self.render_scale = 1.0
+        self.target_fps = 60
+        self._callbacks: list[Callable[["ComputeMode"], None]] = []
+
+    def interval(self, base_seconds: float) -> float:
+        """`base_seconds` stretched by the current update-rate budget: use
+        for sleeps/ticks (full rate -> unchanged, efficiency -> ~2.3x slower)."""
+        return base_seconds / max(self.update_rate_scale, 0.05)
+
+    def on_change(self, callback: Callable[["ComputeMode"], None]) -> None:
+        """`callback(self)` runs on the dispatch thread whenever the state changes."""
+        self._callbacks.append(callback)
+
+    def _apply(self, value: Any) -> None:
+        if not isinstance(value, dict):
+            return
+        state = (value.get("spins") or {}).get(self.plugin_type) or value.get("app")
+        if not isinstance(state, dict):
+            return
+        self.requested = state.get("requested", self.requested)
+        self.level = float(state.get("level", self.level))
+        self.update_rate_scale = float(state.get("updateRateScale", self.update_rate_scale))
+        self.detail = float(state.get("detail", self.detail))
+        self.render_scale = float(state.get("renderScale", self.render_scale))
+        self.target_fps = int(state.get("targetFps", self.target_fps))
+        for callback in list(self._callbacks):
+            callback(self)
+
+
 class World:
     """A connection to a running sotrice-server, and the operations a
     plugin can perform on the Core through it: create entities, set and
@@ -481,6 +522,14 @@ class World:
         if batch_ms is not None:
             request["batch_ms"] = batch_ms
         self._request(request)
+
+    def compute_mode(self, plugin_type: str) -> "ComputeMode":
+        """A live ComputeMode for `plugin_type` (see ComputeMode). Subscribes
+        to the app's `compute_mode` attribute with replay, so the current
+        value lands immediately if the app is already running."""
+        cm = ComputeMode(plugin_type)
+        self.subscribe("compute_mode", lambda _e, _n, value, _s: cm._apply(value), replay=True)
+        return cm
 
     def list_plugins(self) -> list[dict[str, str]]:
         """Plugin types available to start, read fresh from the server's

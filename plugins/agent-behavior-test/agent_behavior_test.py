@@ -54,6 +54,9 @@ from typing import Any
 
 from sotrice_client import World
 
+import city_sim
+import city_traffic
+
 ACTIVE_AREA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "city_roads_data", "active_area.json")
 
 # Default when active_area.json is missing entirely (or missing the
@@ -96,7 +99,7 @@ DEFAULT_VEHICLE_COUNT = 0
 # so their own doc comments above stay attached to the actual numbers.
 DEFAULT_AGENT_TYPE_PHYSICS = {
     "walker": {"max_speed_mps": 1.4, "max_accel_mps2": 3.0, "max_decel_mps2": 4.0, "mass_kg": 75.0},
-    "vehicle": {"max_speed_mps": 6.0, "max_accel_mps2": 1.8, "max_decel_mps2": 5.0, "mass_kg": 1400.0},
+    "vehicle": {"max_speed_mps": 14.0, "max_accel_mps2": 1.8, "max_decel_mps2": 5.0, "mass_kg": 1400.0},
 }
 
 
@@ -183,6 +186,7 @@ def default_agent_behavior_settings() -> dict[str, Any]:
     and `agent_type_physics` DO apply immediately, every tick, with no
     restart needed — see on_settings_changed in main()."""
     return {
+        "auto_counts": True,   # real-area mode: counts scale with the road length until walker_count/vehicle_count is edited
         "walker_count": configured_agent_count(),
         "vehicle_count": configured_vehicle_count(),
         "building_destination_bias": DEFAULT_BUILDING_DESTINATION_BIAS,
@@ -342,12 +346,18 @@ def main():
                 # intentionally NOT applied to the already-spawned
                 # own_agents list below -- see default_agent_behavior_settings's
                 # own doc comment on why counts need a restart.
+                if "auto_counts" in value:
+                    live_settings["auto_counts"] = bool(value["auto_counts"])
                 if "walker_count" in value:
+                    if int(value["walker_count"] or 0) != live_settings["walker_count"]:
+                        live_settings["auto_counts"] = False
                     try:
                         live_settings["walker_count"] = int(value["walker_count"])
                     except (TypeError, ValueError):
                         pass
                 if "vehicle_count" in value:
+                    if int(value["vehicle_count"] or 0) != live_settings["vehicle_count"]:
+                        live_settings["auto_counts"] = False
                     try:
                         live_settings["vehicle_count"] = int(value["vehicle_count"])
                     except (TypeError, ValueError):
@@ -392,6 +402,88 @@ def main():
         world.subscribe("road_network", on_road_network, replay=True)
         world.subscribe("building_position", on_building_position, replay=True)
 
+        # --- REAL-AREA MODE (city-data plugin's schema v1, see docs/city-schema) -----------------------------------
+        # Everything arrives by attribute NAME (city_road_graph, city_terrain, city_rail, ct_buildings, ct_pois,
+        # city_dataset). When a real network is present the cars/walkers of city_traffic.CityTraffic drive on it and
+        # the legacy node-to-node walkers below are retired; with only the old `road_network` demo data (or nothing)
+        # the legacy behaviour is unchanged.
+        city_lock = threading.Lock()
+        city_data: dict[str, Any] = {"graph": None, "terrain": None, "rail": None, "area_id": None}
+        city_tiles_buildings: dict[int, list] = {}
+        city_tiles_pois: dict[int, list] = {}
+        city_state: dict[str, Any] = {"dirty_at": None, "traffic": None, "building": False, "generation": 0}
+
+        def mark_dirty() -> None:
+            with city_lock:
+                city_state["dirty_at"] = time.time()
+
+        def on_city_graph(entity, attribute, value, source):
+            with city_lock:
+                city_data["graph"] = value
+            mark_dirty()
+
+        def on_city_terrain(entity, attribute, value, source):
+            with city_lock:
+                city_data["terrain"] = value
+            mark_dirty()
+
+        def on_city_rail(entity, attribute, value, source):
+            with city_lock:
+                city_data["rail"] = value
+
+        def on_city_buildings(entity, attribute, value, source):
+            with city_lock:
+                city_tiles_buildings[entity] = value if isinstance(value, list) else []
+            mark_dirty()
+
+        def on_city_pois(entity, attribute, value, source):
+            with city_lock:
+                city_tiles_pois[entity] = value if isinstance(value, list) else []
+            mark_dirty()
+
+        def on_city_dataset(entity, attribute, value, source):
+            area = (value or {}).get("area") or {}
+            with city_lock:
+                if value and value.get("status") == "loading":
+                    city_state["traffic_reset"] = True
+                if area.get("id") != city_data["area_id"]:
+                    city_data["area_id"] = area.get("id")
+                    city_state["traffic_reset"] = True
+            mark_dirty()
+
+        def build_city_sim(generation: int) -> None:
+            """Heavy: runs on a worker thread (network validation, spatial indexes, destinations)."""
+            try:
+                with city_lock:
+                    graph, terrain, rail = city_data["graph"], city_data["terrain"], city_data["rail"]
+                    buildings = [b for lst in city_tiles_buildings.values() for b in lst]
+                    pois = [p for lst in city_tiles_pois.values() for p in lst]
+                if not graph or not graph.get("edges"):
+                    return
+                t0 = time.time()
+                sim = city_sim.SimWorld(graph, buildings, terrain, pois, rail)
+                with city_lock:
+                    if generation == city_state["generation"]:
+                        city_state["pending_sim"] = sim
+                print(f"[{name}] city sim built in {time.time() - t0:.1f} s: {len(sim.net.edges)} edges, {len(sim.core)} drivable nodes, {len(sim.destinations)} destinations, {len(sim.entrances)} station entrances, validation {sim.validation}", flush=True)
+            except Exception as exc:  # never kill the plugin over one bad dataset
+                print(f"[{name}] city sim build failed: {exc!r}", flush=True)
+            finally:
+                with city_lock:
+                    city_state["building"] = False
+
+        world.subscribe("city_road_graph", on_city_graph, replay=True)
+        world.subscribe("city_terrain", on_city_terrain, replay=True)
+        world.subscribe("city_rail", on_city_rail, replay=True)
+        world.subscribe("ct_buildings", on_city_buildings, replay=True)
+        world.subscribe("ct_pois", on_city_pois, replay=True)
+        world.subscribe("city_dataset", on_city_dataset, replay=True)
+        time.sleep(1.5)   # let the replays arrive: decides real-area vs legacy start below
+        guard_control = world.create_entity()
+        world.set_attribute(guard_control, "kind", "agent_guard_control")
+        world.set_attribute(guard_control, "agent_guard_stats", {"checks": 0, "violations": 0, "repairs": 0, "last": None})
+        city_mode = {"on": False}
+
         # This plugin's OWN independent agent entities — decoupled from
         # physics-test's fixed synthetic falling-box scene entirely (that
         # scene is a demo of a handful of hardcoded bodies, not something
@@ -409,7 +501,9 @@ def main():
         walker_count = live_settings["walker_count"]
         vehicle_count = live_settings["vehicle_count"]
         own_agents: list[tuple[int, str]] = []  # (entity, agent_type)
-        for agent_type, count in (("walker", walker_count), ("vehicle", vehicle_count)):
+        with city_lock:
+            have_city = bool(city_data["graph"])
+        for agent_type, count in (("walker", 0 if have_city else walker_count), ("vehicle", 0 if have_city else vehicle_count)):
             for _ in range(count):
                 agent_entity = world.create_entity()
                 world.set_attribute(agent_entity, "kind", "agent")
@@ -480,6 +574,8 @@ def main():
             return [graph.positions[node_id] for node_id in path]
 
         print(f"[{name}] running at {DECISION_HZ}Hz — Ctrl+C to stop")
+        # Compute mode: decide less often (with proportionally larger steps) under a lower budget.
+        compute = world.compute_mode("agent-behavior-test")
         try:
             while True:
                 with state_lock:
@@ -530,7 +626,55 @@ def main():
                 # the physics-test-steering path above, just applied to
                 # positions this plugin owns outright instead of a
                 # `desired_target` intent someone else has to interpret.
-                for agent_entity, agent_type in own_agents:
+                tick_start = time.time()
+                with city_lock:
+                    if city_state.pop("traffic_reset", False) and city_state["traffic"] is not None:
+                        old_traffic = city_state["traffic"]
+                        old_traffic.set_counts(0, 0)
+                        pending_out = old_traffic.tick(0.0, live_settings)
+                        city_state["traffic"] = None
+                        city_state["generation"] += 1
+                        city_mode["on"] = False
+                        world.set_many(pending_out)
+                    if city_state.get("pending_sim") is not None:
+                        sim_new = city_state.pop("pending_sim")
+                        city_state["traffic"] = city_traffic.CityTraffic(sim_new, world.create_entity)
+                        city_mode["on"] = True
+                        for legacy_entity, _t in own_agents:
+                            world.set_attribute(legacy_entity, "kind", "retired")
+                        own_agents.clear()
+                        city_state["last_counts"] = None
+                    if city_state["dirty_at"] is not None and time.time() - city_state["dirty_at"] > 1.5 and not city_state["building"] and city_data["graph"]:
+                        city_state["dirty_at"] = None
+                        city_state["building"] = True
+                        threading.Thread(target=build_city_sim, args=(city_state["generation"],), daemon=True).start()
+                    traffic = city_state["traffic"]
+                if traffic is not None:
+                    with state_lock:
+                        live_copy = {"building_destination_bias": live_settings["building_destination_bias"], "agent_type_physics": {k: dict(v) for k, v in live_settings["agent_type_physics"].items()}, "auto_counts": live_settings.get("auto_counts", True), "walker_count": live_settings["walker_count"], "vehicle_count": live_settings["vehicle_count"]}
+                    if live_copy["auto_counts"]:
+                        want_w, want_v = traffic.sim.default_counts()
+                    else:
+                        want_w, want_v = live_copy["walker_count"], live_copy["vehicle_count"]
+                    if city_state.get("last_counts") != (want_w, want_v):
+                        city_state["last_counts"] = (want_w, want_v)
+                        traffic.set_counts(want_w, want_v)
+                        with state_lock:
+                            if live_settings.get("auto_counts", True):
+                                live_settings["walker_count"], live_settings["vehicle_count"] = want_w, want_v
+                                world.set_attribute(control, "agent_behavior_settings", dict(live_settings))
+                    now = time.time()
+                    dt_real = min(0.25, now - city_state.get("last_tick", now - 1.0 / DECISION_HZ))
+                    city_state["last_tick"] = now
+                    updates = traffic.tick(dt_real, live_copy)
+                    for i in range(0, len(updates), 600):
+                        world.set_many(updates[i:i + 600])
+                    if traffic.tick_no % 20 == 0:
+                        world.set_attribute(guard_control, "agent_guard_stats", traffic.guards.stats.as_dict())
+                    time.sleep(max(0.0, 0.1 - (time.time() - tick_start)))
+                    continue
+
+                for agent_entity, agent_type in list(own_agents):
                     position = own_positions[agent_entity]
                     route = own_routes.get(agent_entity)
 
@@ -545,7 +689,7 @@ def main():
                     distance = math.hypot(dx, dz)
 
                     physics = current_physics[agent_type]
-                    dt = 1.0 / DECISION_HZ
+                    dt = compute.interval(1.0 / DECISION_HZ)
                     speed = own_speeds[agent_entity]
                     # Decelerate once current speed's own stopping distance
                     # (v^2 / 2a) would carry past the waypoint, so arrival
@@ -571,7 +715,7 @@ def main():
                     own_positions[agent_entity] = new_position
                     world.set_attribute(agent_entity, "position", {"x": new_position[0], "y": 0.0, "z": new_position[1]})
 
-                time.sleep(1.0 / DECISION_HZ)
+                time.sleep(compute.interval(1.0 / DECISION_HZ))
         except KeyboardInterrupt:
             print(f"[{name}] stopped")
 

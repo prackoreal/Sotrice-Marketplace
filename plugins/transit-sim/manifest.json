@@ -1,6 +1,6 @@
 {
   "type": "transit-sim",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Animates city-roads' synthetic underground layer: watches the published road_network for underground (layer=\"underground\") edges, groups them by transport_mode/name, and spawns one shuttle entity per line/tunnel found, ping-ponging it back and forth along that line's own node sequence forever. Publishes the same kind/agent_type shape agent-behavior-test's own vehicle agents use, plus a new vehicle_kind (\"subway_wagon\"/\"car\") rendering-test-ui uses to pick a real subway-wagon/car silhouette. Has no idea how many underground lines exist or where -- discovers everything purely from the published attribute, same as every other watch/write plugin here.",
   "concepts": [
     "TransitSim"

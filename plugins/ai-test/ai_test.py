@@ -90,6 +90,7 @@ Registered in plugins/registry.json as "ai-test".
 """
 
 import json
+import os
 import re
 import threading
 import time
@@ -188,6 +189,34 @@ def load_api_key() -> Optional[str]:
             return line[len("GEMINI_API_KEY=") :].strip() or None
     stripped = text.strip()
     return stripped or None
+
+
+def _saved_key_path() -> Path:
+    """Where a key entered in a Settings UI is persisted, so it survives an
+    app restart (Core itself is in-memory: without this the user had to
+    re-enter the key on every launch). Per-user, outside any plugin install
+    dir (a plugin update replaces that). SOTRICE_AI_DIR overrides it (tests)."""
+    override = os.environ.get("SOTRICE_AI_DIR")
+    base = Path(override) if override else Path(os.environ.get("APPDATA") or Path.home()) / "Sotrice" / "ai"
+    return base / "gemini_api_key.txt"
+
+
+def load_saved_key() -> Optional[str]:
+    try:
+        return _saved_key_path().read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
+
+
+def save_key(key: str) -> bool:
+    try:
+        path = _saved_key_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(key, encoding="utf-8")
+        return True
+    except OSError as exc:
+        print(f"[ai-test] could not persist the API key ({exc}) -- it will work until this process exits")
+        return False
 
 
 # Gemini's inline-data request ceiling is 20 MB TOTAL (prompt + every
@@ -331,11 +360,16 @@ class Settings:
         self.lock = threading.Lock()
         self.api_key = fallback_api_key
         self.cost_bias = "auto"
+        self.on_configured = None  # set by main(): publishes ai_api_key_configured
 
     def on_api_key(self, entity: int, attribute: str, value: Any, source: Optional[str]):
         if isinstance(value, str) and value.strip():
             with self.lock:
                 self.api_key = value.strip()
+            if value.strip() != load_saved_key():
+                save_key(value.strip())
+            if self.on_configured:
+                self.on_configured(True)
 
     def on_cost_bias(self, entity: int, attribute: str, value: Any, source: Optional[str]):
         if value in VALID_COST_BIASES:
@@ -350,7 +384,7 @@ class Settings:
 def main():
     with World() as world:
         name = world.identify("ai-test")
-        fallback_key = load_api_key()
+        fallback_key = load_saved_key() or load_api_key()
         settings = Settings(fallback_key)
 
         # A real control Entity — see the module docstring's "Settings"
@@ -375,6 +409,7 @@ def main():
                 "ai_request pushes will get a real error response, not silently hang"
             )
 
+        settings.on_configured = lambda ok: world.set_attribute(control, "ai_api_key_configured", ok)
         world.subscribe("ai_api_key", settings.on_api_key, replay=True)
         world.subscribe("ai_cost_bias", settings.on_cost_bias, replay=True)
 
@@ -460,7 +495,7 @@ def _answer_request(
         world.set_attribute(
             entity,
             "ai_response",
-            {"request_id": request_id, "text": None, "model": model, "error": "no Gemini API key configured"},
+            {"request_id": request_id, "text": None, "model": model, "error": "No Gemini API key set yet. In the city view open Settings > AI (Gemini key) and paste your key (free at ai.google.dev)."},
         )
         return
 

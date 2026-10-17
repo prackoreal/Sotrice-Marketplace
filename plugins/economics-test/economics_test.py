@@ -92,6 +92,12 @@ class EconomicsState:
         self.road_nodes: dict[str, tuple[float, float]] = {}
         self.road_edges: list[dict] = []
         self.buildings: dict[int, tuple[float, float]] = {}
+        # Spatial hash of the buildings (cell = TRAFFIC_RADIUS_M): a mover's
+        # position only needs the 3x3 cells around it checked, not every
+        # building (register_visit ran once per position push -- thousands/s
+        # against ~1,100 buildings -- and was the plugin's whole CPU cost).
+        self._grid: dict[tuple[int, int], set[int]] = {}
+        self._cell_of: dict[int, tuple[int, int]] = {}
         self.traffic_counts: dict[int, int] = {}
         self.last_counted: dict[tuple[int, int], float] = {}
         # User-editable economics (city_buildings.py's
@@ -100,6 +106,25 @@ class EconomicsState:
         # "shop" AND has a real price.
         self.building_types: dict[int, str] = {}
         self.goods_price_eur: dict[int, float] = {}
+
+    @staticmethod
+    def _cell(position: tuple[float, float]) -> tuple[int, int]:
+        return (math.floor(position[0] / TRAFFIC_RADIUS_M), math.floor(position[1] / TRAFFIC_RADIUS_M))
+
+    def set_building(self, building_entity: int, position: tuple[float, float]) -> None:
+        """Records (or moves) a building; call with the lock held."""
+        self.buildings[building_entity] = position
+        cell = self._cell(position)
+        old = self._cell_of.get(building_entity)
+        if old != cell:
+            if old is not None:
+                members = self._grid.get(old)
+                if members is not None:
+                    members.discard(building_entity)
+                    if not members:
+                        del self._grid[old]
+            self._grid.setdefault(cell, set()).add(building_entity)
+            self._cell_of[building_entity] = cell
 
     def revenue_estimate(self, building_entity: int) -> float | None:
         if self.building_types.get(building_entity) != "shop":
@@ -132,16 +157,27 @@ class EconomicsState:
         outside the lock, matching this class's own no-network-calls-
         while-locked discipline."""
         fresh: list[tuple[int, int]] = []
-        for building_entity, building_position in self.buildings.items():
-            if math.hypot(mover_position[0] - building_position[0], mover_position[1] - building_position[1]) > TRAFFIC_RADIUS_M:
-                continue
-            key = (mover_entity, building_entity)
-            if now - self.last_counted.get(key, 0.0) < TRAFFIC_RECOUNT_COOLDOWN_S:
-                continue
-            self.last_counted[key] = now
-            count = self.traffic_counts.get(building_entity, 0) + 1
-            self.traffic_counts[building_entity] = count
-            fresh.append((building_entity, count))
+        cx, cz = self._cell(mover_position)
+        for dx in (-1, 0, 1):
+            for dz in (-1, 0, 1):
+                members = self._grid.get((cx + dx, cz + dz))
+                if not members:
+                    continue
+                for building_entity in members:
+                    building_position = self.buildings[building_entity]
+                    if math.hypot(mover_position[0] - building_position[0], mover_position[1] - building_position[1]) > TRAFFIC_RADIUS_M:
+                        continue
+                    key = (mover_entity, building_entity)
+                    if now - self.last_counted.get(key, 0.0) < TRAFFIC_RECOUNT_COOLDOWN_S:
+                        continue
+                    self.last_counted[key] = now
+                    count = self.traffic_counts.get(building_entity, 0) + 1
+                    self.traffic_counts[building_entity] = count
+                    fresh.append((building_entity, count))
+        # last_counted only ever grew (one entry per mover x building ever visited);
+        # entries past their cooldown mean nothing, so drop them in bulk, amortised.
+        if len(self.last_counted) > 20000:
+            self.last_counted = {k: t for k, t in self.last_counted.items() if now - t < TRAFFIC_RECOUNT_COOLDOWN_S}
         return fresh
 
 
@@ -169,7 +205,7 @@ def main():
         def on_building_position(entity, attribute, value, source):
             position = (float(value["x"]), float(value["z"]))
             with state.lock:
-                state.buildings[entity] = position
+                state.set_building(entity, position)
                 state.traffic_counts.setdefault(entity, 0)
                 result = state.nearest_road(position)
             # A real, meaningful "zero visits so far" baseline the moment

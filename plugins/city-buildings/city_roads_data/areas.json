@@ -3,8 +3,30 @@
   "areas": {
     "klosterneuburg_center": {
       "name": "Central Klosterneuburg, Austria",
-      "bbox": { "south": 48.3050, "west": 16.3270, "north": 48.3065, "east": 16.3300 },
+      "bbox": {
+        "south": 48.3,
+        "west": 16.3195,
+        "north": 48.3108,
+        "east": 16.3355
+      },
       "description": "A few real city blocks around central Klosterneuburg, Austria",
+      "default_agent_count": 8
+    },
+    "vienna_stephansplatz_karlsplatz": {
+      "name": "Vienna: Stephansplatz to Karlsplatz",
+      "bbox": {
+        "south": 48.1985,
+        "west": 16.36,
+        "north": 48.2125,
+        "east": 16.385
+      },
+      "description": "Dense old town: U1/U2/U4 underground, trams, 1600+ buildings (real OpenStreetMap data, fetched on demand)",
+      "default_agent_count": 40
+    },
+    "korneuburg_hauptplatz__austria": {
+      "name": "Korneuburg Hauptplatz, Austria",
+      "bbox": { "south": 48.34264525770751, "west": 16.331798415123355, "north": 48.344621542292494, "east": 16.334771784876647 },
+      "description": "About 220 m around Korneuburg Hauptplatz, Austria",
       "default_agent_count": 8
     }
   }

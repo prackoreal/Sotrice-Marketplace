@@ -1,0 +1,6 @@
+{
+  "_comment": "Which extracted area city-roads.py/city-buildings.py load, and how many of each agent type agent-behavior-test.py spawns for it. Edit this file (or swap it out per-area) to switch -- no code changes needed. agent_count is the walker count (kept under its original name for backward compatibility); vehicle_count is the new, faster agent_type sharing the same real road graph.",
+  "area": "klosterneuburg_center",
+  "agent_count": 8,
+  "vehicle_count": 3
+}

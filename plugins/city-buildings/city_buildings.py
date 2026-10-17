@@ -1,39 +1,47 @@
-"""city-buildings — a real, minimal building-FOOTPRINT data source, for
-the SAME small Klosterneuburg area city-roads already covers. Loads a
-real OpenStreetMap extract (see `scripts/extract_city_buildings.py` for
-how it was produced and `clients/python/city_roads_data/
-klosterneuburg_center_buildings.json` for the data itself — aligned to
-the SAME local coordinate origin as `city_roads.py`'s road network, so
-the two line up spatially) and publishes one entity per real building:
-its footprint polygon, ground-level position (centroid), and height —
-real where OSM had a height/building:levels tag, a documented estimate
-where it didn't (see `building_height_source`).
+"""city-buildings — one entity per REAL building (OpenStreetMap footprints,
+heights, types, materials where tagged) for the active area, published as the
+attributes every existing consumer already reads (building_footprint,
+building_position, building_height_m, building_material, building_type, ...).
 
-This is deliberately the keyless, free, ODbL-licensed OSM footprint
-problem — plain 2D outlines plus a height number — NOT the
-photorealistic Google 3D Tiles / Cesium ingestion, which needs a real
-external account/API key decision this file has no business making.
-Unblocks a future economics spin (needs real building entities to
-compute against) and gives a future rendering spin real building shapes
-to draw — this file has no idea whether either is running, the same
-ignorance-of-the-consumer every other watch/write plugin here already
-has.
+Data source: the cached schema-v1 dataset city-data downloads for the active
+area (docs/city-schema/schema.md) — any place on Earth, not the old 15-
+building demo. If the active area has no dataset yet (offline first run) the
+original small demo extract in city_roads_data/ is used, labelled as such.
 
-No live API calls at runtime — same "no live API" discipline as
-city_roads.py and this project's LaMa integration.
+* Live area switching: `city_dataset` (status ready, new area id) => this
+  plugin republishes. Core has no entity deletion, so building entities are
+  POOLED: reused for the new area's buildings, surplus ones are retired
+  (`kind = "retired"`, empty footprint).
+* Footprint HOLES and the richer schema fields are published as new optional
+  attributes (building_id, building_levels, building_min_height_m,
+  building_base_y, building_roof, building_has_parts, building_part_of,
+  building_surfaces, building_footprint_holes). Parent outlines of buildings
+  that have `building:part`s are not published: the parts replace them.
+* Sandbox edits (move / voice edits) work exactly as before and persist per
+  area in the area's cache folder (overlay_buildings.json); the AI/voice edit
+  path stays the ONLY writer (ALLOWED_EDIT_FIELDS validators below).
+* AI wall-material classification: only for small areas (<= AI_CLASSIFY_MAX
+  unknown-material buildings). For a real city the looks pipeline
+  (city_surface_patch, schema section 6) fills materials in efficient batches;
+  firing one Gemini request per building of a real city would be thousands of
+  billed requests.
 
 Registered in plugins/registry.json as "city-buildings".
 """
 
 import json
 import os
+import threading
 import time
 
+import citydata_store as store
 from sotrice_client import World
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "city_roads_data")
-ACTIVE_AREA_PATH = os.path.join(DATA_DIR, "active_area.json")
-DEFAULT_AREA = "klosterneuburg_center"
+DATA_DIR = store.LEGACY_DIR
+ACTIVE_AREA_PATH = store.LEGACY_ACTIVE
+DEFAULT_AREA = store.DEFAULT_AREA
+AI_CLASSIFY_MAX = 25  # beyond this, leave materials to the looks pipeline (cost)
+BATCH = 400  # attribute writes per set_many
 
 KNOWN_MATERIALS = {"brick", "concrete", "stucco", "wood", "glass", "stone", "metal"}
 
@@ -115,237 +123,243 @@ ALLOWED_EDIT_FIELDS = {
 
 
 def active_area() -> str:
-    """Same active-area config city_roads.py reads — see that file's own
-    doc comment. Kept as its own small function here (not a shared
-    import) since these two plugins are each meant to run standalone,
-    with no dependency on each other's module."""
-    if os.path.exists(ACTIVE_AREA_PATH):
-        with open(ACTIVE_AREA_PATH, encoding="utf-8") as f:
-            return json.load(f).get("area", DEFAULT_AREA)
-    return DEFAULT_AREA
+    return store.read_active()["area"]
 
 
-def load_building_data():
-    data_path = os.path.join(DATA_DIR, f"{active_area()}_buildings.json")
-    with open(data_path, encoding="utf-8") as f:
-        return json.load(f)
-
-
-def overlay_path(area: str) -> str:
+def legacy_overlay_path(area: str) -> str:
     return os.path.join(DATA_DIR, f"{area}_buildings_overlay.json")
 
 
 def load_buildings_overlay(area: str) -> dict:
-    """Sandbox-mode moved-building positions, keyed by the building's
-    stable real OSM way id (NOT the ECS entity id, which isn't stable
-    across restarts). Kept entirely separate from the real OSM extract
-    file, which stays immutable/untouched — this is Sotrice-generated
-    sandbox state, not OpenStreetMap data."""
-    path = overlay_path(area)
-    if os.path.exists(path):
-        with open(path, encoding="utf-8") as f:
-            return json.load(f)
-    return {}
+    """Sandbox edits keyed by the building's stable OSM id (NOT the ECS entity
+    id, which isn't stable across restarts). Separate from the extract itself,
+    which stays immutable: this is Sotrice-generated sandbox state."""
+    return store.load_overlay(area, "buildings", legacy_overlay_path(area), {})
 
 
 def save_buildings_overlay(area: str, overlay: dict) -> None:
-    with open(overlay_path(area), "w", encoding="utf-8") as f:
-        json.dump(overlay, f, indent=2)
+    store.save_overlay(area, "buildings", overlay)
 
 
-def main():
-    with World() as world:
-        name = world.identify("city-buildings")
-        print(f"[{name}] loading building extract for area {active_area()!r}")
+def load_area_buildings(area: str):
+    """-> (buildings, meta) or None. Buildings are in the legacy dict shape
+    (store.legacy_buildings) with the extra schema fields."""
+    ds = store.load_dataset(area)
+    if ds is not None:
+        return store.legacy_buildings(ds), {
+            "attribution": ds["area"]["attribution"], "license": ds["area"]["license"],
+            "area_description": f"{ds['area']['name']} \u2014 real OpenStreetMap data", "real": True,
+        }
+    path = os.path.join(DATA_DIR, f"{area}_buildings.json")
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    return data["buildings"], {"attribution": data["attribution"], "license": data["license"], "area_description": data["area_description"] + " (small demo extract)", "real": False}
 
-        area = active_area()
-        data = load_building_data()
-        overlay = load_buildings_overlay(area)
-        for building in data["buildings"]:
-            moved = overlay.get(building["id"])
-            if moved:
-                if "position" in moved:
-                    building["position"] = moved["position"]
-                if "footprint" in moved:
-                    building["footprint"] = moved["footprint"]
-                if "wall_material" in moved:
-                    building["wall_material"] = moved["wall_material"]
-                if "height_m" in moved:
-                    building["height_m"] = moved["height_m"]
-                if "name" in moved:
-                    building["name"] = moved["name"]
-                if "building_type" in moved:
-                    building["building_type"] = moved["building_type"]
-                if "goods_price_eur" in moved:
-                    building["goods_price_eur"] = moved["goods_price_eur"]
-        real_height_count = sum(1 for b in data["buildings"] if b["height_source"] == "tag")
-        print(
-            f"[{name}] {data['area_description']} — {len(data['buildings'])} buildings "
-            f"({real_height_count} with a real OSM height tag, "
-            f"{len(data['buildings']) - real_height_count} estimated) "
-            f"({data['attribution']}, {data['license']})"
-        )
 
-        control = world.create_entity()
-        world.set_attribute(control, "building_attribution", data["attribution"])
-        world.set_attribute(control, "building_area_description", data["area_description"])
+class BuildingPublisher:
+    def __init__(self, world: World, name: str):
+        self.world = world
+        self.name = name
+        self.control = world.create_entity()
+        self.pool: list[int] = []
+        self.building_by_entity: dict[int, dict] = {}
+        self.area = None
+        self.overlay: dict = {}
+        self.lock = threading.RLock()
 
-        building_by_entity = {}
+    # --- publishing -------------------------------------------------------------------
 
-        for building in data["buildings"]:
-            entity = world.create_entity()
-            building_by_entity[entity] = building
-            world.set_attribute(entity, "kind", "building")
-            world.set_attribute(entity, "building_osm_id", building["id"])
-            world.set_attribute(entity, "building_footprint", building["footprint"])
-            world.set_attribute(
-                entity, "building_position",
-                {"x": building["position"]["x"], "y": 0.0, "z": building["position"]["z"]},
-            )
-            world.set_attribute(entity, "building_height_m", building["height_m"])
-            world.set_attribute(entity, "building_height_source", building["height_source"])
-            if building.get("wall_material"):
-                world.set_attribute(entity, "building_material", building["wall_material"])
-            if building.get("building_type"):
-                world.set_attribute(entity, "building_type", building["building_type"])
-            if building.get("name"):
-                world.set_attribute(entity, "building_name", building["name"])
-            if building.get("goods_price_eur") is not None:
-                world.set_attribute(entity, "building_goods_price_eur", building["goods_price_eur"])
+    def load(self, area: str) -> bool:
+        loaded = load_area_buildings(area)
+        if loaded is None:
+            return False
+        buildings, meta = loaded
+        with self.lock:
+            self.area = area
+            self.overlay = load_buildings_overlay(area)
+            for building in buildings:
+                moved = self.overlay.get(building["id"])
+                if moved:
+                    for key in ("position", "footprint", "wall_material", "height_m", "name", "building_type", "goods_price_eur"):
+                        if key in moved:
+                            building[key] = moved[key]
+            self.building_by_entity = {}
+            while len(self.pool) < len(buildings):
+                self.pool.append(self.world.create_entity())
+            real_heights = sum(1 for b in buildings if b["height_source"] == "tag")
+            print(f"[{self.name}] {meta['area_description']} \u2014 {len(buildings)} buildings ({real_heights} with a real OSM height tag, "
+                  f"{len(buildings) - real_heights} estimated) ({meta['attribution']}, {meta['license']})")
+            self.world.set_many([
+                (self.control, "building_attribution", meta["attribution"]),
+                (self.control, "building_area_description", meta["area_description"]),
+            ])
+            unknown = []
+            updates = []
+            for index, building in enumerate(buildings):
+                entity = self.pool[index]
+                self.building_by_entity[entity] = building
+                updates.extend(self._attributes(entity, building))
+                if not building.get("wall_material"):
+                    unknown.append((entity, building))
+                if len(updates) >= BATCH:
+                    self.world.set_many(updates)
+                    updates = []
+            for entity in self.pool[len(buildings):]:
+                updates.extend([(entity, "kind", "retired"), (entity, "building_footprint", [])])
+            if updates:
+                self.world.set_many(updates)
+            if 0 < len(unknown) <= AI_CLASSIFY_MAX:
+                for entity, building in unknown:
+                    self._request_material(entity, building)
+            elif unknown:
+                print(f"[{self.name}] {len(unknown)} buildings without a wall material: leaving them to the looks pipeline "
+                      f"(AI classification is only automatic for <= {AI_CLASSIFY_MAX}; one request per building would be billed per building)")
+        return True
 
-            # No real OSM building:material tag — ask the (optional,
-            # may-not-be-running) ai-test spin to infer a plausible wall
-            # material from the real signal we do have (type/height/
-            # footprint size). ai-test is domain-agnostic and doesn't
-            # know "building" exists; we do the building-specific
-            # prompt-shaping and response-handling here, per
-            # [[project_universal_ai_spin_design]]'s "calling spin shapes
-            # the prompt" rule.
-            if not building.get("wall_material"):
-                world.set_attribute(entity, "ai_request", {
-                    "prompt": (
-                        "You are classifying the primary exterior wall material of a "
-                        "real building for a city-simulation renderer. Reply with ONLY "
-                        "one word from this list: brick, concrete, stucco, wood, glass, "
-                        "stone, metal. Base your answer on the building type, height, and "
-                        "footprint size given in the context."
-                    ),
-                    "context": {
-                        "building_type": building.get("building_type"),
-                        "height_m": building["height_m"],
-                        "height_source": building["height_source"],
-                        "footprint": building["footprint"],
-                    },
-                    "request_id": f"wall-material-{entity}",
-                    "task_hint": "simple",
-                })
+    def _attributes(self, entity: int, b: dict) -> list:
+        ups = [
+            (entity, "kind", "building"),
+            (entity, "building_osm_id", b["id"]),
+            (entity, "building_footprint", b["footprint"]),
+            (entity, "building_position", {"x": b["position"]["x"], "y": 0.0, "z": b["position"]["z"]}),
+            (entity, "building_height_m", b["height_m"]),
+            (entity, "building_height_source", b["height_source"]),
+        ]
+        if b.get("wall_material"):
+            ups.append((entity, "building_material", b["wall_material"]))
+        if b.get("building_type"):
+            ups.append((entity, "building_type", b["building_type"]))
+        if b.get("name"):
+            ups.append((entity, "building_name", b["name"]))
+        if b.get("goods_price_eur") is not None:
+            ups.append((entity, "building_goods_price_eur", b["goods_price_eur"]))
+        if "dataset_id" in b:  # real dataset: the richer schema-v1 fields
+            ups.extend([
+                (entity, "building_id", b["dataset_id"]),
+                (entity, "building_levels", b.get("levels")),
+                (entity, "building_min_height_m", b.get("min_height_m", 0.0)),
+                (entity, "building_base_y", b.get("base_y", 0.0)),
+                (entity, "building_roof", b.get("roof")),
+                (entity, "building_has_parts", False),
+                (entity, "building_part_of", b.get("part_of")),
+                (entity, "building_surfaces", b.get("surfaces")),
+                (entity, "building_footprint_holes", b.get("holes") or []),
+            ])
+        return ups
 
-        def handle_ai_material_response(entity, attribute, value, source):
-            if not isinstance(value, dict):
-                return
-            request_id = value.get("request_id")
-            if not isinstance(request_id, str) or not request_id.startswith("wall-material-"):
-                return
-            text = value.get("text")
-            if not text:
-                return
-            material = text.strip().split()[0].strip(".,").lower()
-            world.set_attribute(entity, "building_material", material)
-            world.set_attribute(entity, "building_material_source", "ai")
+    def _request_material(self, entity: int, building: dict) -> None:
+        # ai-test is domain-agnostic; WE do the building-specific prompt-shaping
+        # (the "calling spin shapes the request" rule of the universal AI spin).
+        self.world.set_attribute(entity, "ai_request", {
+            "prompt": (
+                "You are classifying the primary exterior wall material of a real building for a "
+                "city-simulation renderer. Reply with ONLY one word from this list: brick, concrete, stucco, wood, "
+                "glass, stone, metal. Base your answer on the building type, height, and footprint size given in the context."
+            ),
+            "context": {"building_type": building.get("building_type"), "height_m": building["height_m"],
+                        "height_source": building["height_source"], "footprint": building["footprint"]},
+            "request_id": f"wall-material-{entity}",
+            "task_hint": "simple",
+        })
 
-        world.subscribe("ai_response", handle_ai_material_response, replay=True)
+    # --- handlers ----------------------------------------------------------------------
 
-        # Sandbox mode: rendering-test-ui writes this on a mouse drag-drop
-        # (desktop only for now — see the design memory this was built
-        # from, project_city_spin_sandbox_road_regen_design). The UI only
-        # shapes the request (new_x/new_z); this handler does the actual
-        # work and owns persistence, same division of labor as
-        # ai_request/ai_response. Rigid-translation move only, no
-        # rotation — footprint shape/orientation is preserved as-is.
-        def handle_move_request(entity, attribute, value, source):
-            if not isinstance(value, dict):
-                return
-            building = building_by_entity.get(entity)
+    def on_dataset(self, entity, attribute, value, source):
+        if not isinstance(value, dict) or value.get("status") != "ready":
+            return
+        area = (value.get("area") or {}).get("id")
+        if area and area != self.area:
+            self.load(area)
+
+    def on_ai_response(self, entity, attribute, value, source):
+        if not isinstance(value, dict):
+            return
+        request_id = value.get("request_id")
+        if not isinstance(request_id, str) or not request_id.startswith("wall-material-"):
+            return
+        text = value.get("text")
+        if not text or entity not in self.building_by_entity:
+            return
+        material = text.strip().split()[0].strip(".,").lower()
+        self.world.set_attribute(entity, "building_material", material)
+        self.world.set_attribute(entity, "building_material_source", "ai")
+
+    def on_move_request(self, entity, attribute, value, source):
+        """Sandbox mode: rendering-test-ui writes this on a mouse drag-drop. The
+        UI only shapes the request (new_x/new_z); this does the work and owns
+        persistence. Rigid translation only, no rotation."""
+        if not isinstance(value, dict):
+            return
+        with self.lock:
+            building = self.building_by_entity.get(entity)
             if building is None:
                 return
             new_x, new_z = value.get("new_x"), value.get("new_z")
             if not isinstance(new_x, (int, float)) or not isinstance(new_z, (int, float)):
                 return
-            old_pos = building["position"]
-            dx, dz = new_x - old_pos["x"], new_z - old_pos["z"]
+            old = building["position"]
+            dx, dz = new_x - old["x"], new_z - old["z"]
             new_position = {"x": new_x, "z": new_z}
             new_footprint = [{"x": p["x"] + dx, "z": p["z"] + dz} for p in building["footprint"]]
             building["position"] = new_position
             building["footprint"] = new_footprint
-            world.set_attribute(entity, "building_position", {"x": new_x, "y": 0.0, "z": new_z})
-            world.set_attribute(entity, "building_footprint", new_footprint)
-            # Merge into whatever's already there, don't overwrite the
-            # whole record -- a building that was previously voice-edited
-            # (material/height/name, see handle_edit_request below) and
-            # is now ALSO being dragged must keep both sets of changes.
-            record = overlay.setdefault(building["id"], {})
+            self.world.set_attribute(entity, "building_position", {"x": new_x, "y": 0.0, "z": new_z})
+            self.world.set_attribute(entity, "building_footprint", new_footprint)
+            # Merge into whatever's already there: a previously voice-edited
+            # building that is now ALSO dragged must keep both sets of changes.
+            record = self.overlay.setdefault(building["id"], {})
             record["position"] = new_position
             record["footprint"] = new_footprint
-            save_buildings_overlay(area, overlay)
-            print(f"[{name}] building {building['id']} (entity {entity}) moved to "
-                  f"({new_x:.1f}, {new_z:.1f}), persisted to overlay")
+            save_buildings_overlay(self.area, self.overlay)
+            print(f"[{self.name}] building {building['id']} (entity {entity}) moved to ({new_x:.1f}, {new_z:.1f}), persisted to overlay")
 
-        world.subscribe("building_move_request", handle_move_request, replay=True)
-
-        # Voice/AI-driven single-building editing (inspect mode): the
-        # calling UI never writes building_material/building_height_m/
-        # building_name directly from an AI's suggested edit -- it
-        # proposes a field+value here instead, and THIS handler is the
-        # only thing that actually validates and applies it. This matters
-        # because an LLM's JSON output is untrusted input: it can
-        # hallucinate a field name or an out-of-range value, and this is
-        # the one place in the codebase where AI output would otherwise
-        # drive a real attribute write with no server-side check at all.
-        # See project_city_spin_voice_building_edit_design memory for the
-        # full reasoning.
-        def handle_edit_request(entity, attribute, value, source):
-            if not isinstance(value, dict):
-                return
-            building = building_by_entity.get(entity)
+    def on_edit_request(self, entity, attribute, value, source):
+        """Voice/AI-driven single-building editing: the calling UI never writes
+        building_material/height/name from an AI suggestion — it proposes a
+        field+value and THIS handler is the only thing that validates and
+        applies it (an LLM's output is untrusted input)."""
+        if not isinstance(value, dict):
+            return
+        with self.lock:
+            building = self.building_by_entity.get(entity)
             if building is None:
                 return
             request_id = value.get("request_id")
             field = value.get("field")
             spec = ALLOWED_EDIT_FIELDS.get(field) if isinstance(field, str) else None
             if spec is None:
-                world.set_attribute(entity, "building_edit_result", {
-                    "request_id": request_id, "ok": False,
-                    "message": f"{field!r} isn't an editable building property yet.",
-                })
+                self.world.set_attribute(entity, "building_edit_result", {"request_id": request_id, "ok": False, "message": f"{field!r} isn't an editable building property yet."})
                 return
             ok, result = spec["validate"](value.get("value"))
             if not ok:
-                world.set_attribute(entity, "building_edit_result", {
-                    "request_id": request_id, "ok": False, "message": result,
-                })
+                self.world.set_attribute(entity, "building_edit_result", {"request_id": request_id, "ok": False, "message": result})
                 return
             overlay_key = spec["overlay_key"]
             building[overlay_key] = result
-            world.set_attribute(entity, field, result)
+            self.world.set_attribute(entity, field, result)
             if field == "building_material":
-                world.set_attribute(entity, "building_material_source", "voice_edit")
-            record = overlay.setdefault(building["id"], {})
+                self.world.set_attribute(entity, "building_material_source", "voice_edit")
+            record = self.overlay.setdefault(building["id"], {})
             record[overlay_key] = result
-            save_buildings_overlay(area, overlay)
-            world.set_attribute(entity, "building_edit_result", {
-                "request_id": request_id, "ok": True,
-                "message": f"Updated {field} to {result!r}.",
-            })
-            print(f"[{name}] building {building['id']} (entity {entity}) {field} -> "
-                  f"{result!r} via voice edit, persisted")
+            save_buildings_overlay(self.area, self.overlay)
+            self.world.set_attribute(entity, "building_edit_result", {"request_id": request_id, "ok": True, "message": f"Updated {field} to {result!r}."})
+            print(f"[{self.name}] building {building['id']} (entity {entity}) {field} -> {result!r} via voice edit, persisted")
 
-        world.subscribe("building_edit_request", handle_edit_request, replay=True)
 
-        print(f"[{name}] published — idle (this is a static data source, nothing to tick). Ctrl+C to stop")
+def main():
+    with World() as world:
+        name = world.identify("city-buildings")
+        pub = BuildingPublisher(world, name)
+        world.subscribe("ai_response", pub.on_ai_response, replay=True)
+        world.subscribe("building_move_request", pub.on_move_request, replay=True)
+        world.subscribe("building_edit_request", pub.on_edit_request, replay=True)
+        world.subscribe("city_dataset", pub.on_dataset, replay=True)
+        area = active_area()
+        if not pub.load(area):
+            print(f"[{name}] no data for area {area!r} yet - waiting for city-data to download it (city_dataset)")
         try:
-            # A pure data-source plugin: publish once, then just stay
-            # connected (a subscriber joining later still gets the
-            # replayed values) — no per-tick work exists to do.
             while True:
                 time.sleep(3600)
         except KeyboardInterrupt:
