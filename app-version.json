@@ -1,4 +1,4 @@
 {
-  "version": "0.1.31",
-  "notes": "A real city: pick a place and get real OpenStreetMap streets, buildings, terrain, tunnels and subway lines, with cars, pedestrians, trams and trains moving on the real network, in a new 3D view (plus 2D map and Grid). Back button in every full view, working area picker, AI key panel in the city settings (your key is now remembered). Efficiency / Performance / Adaptive modes, and the city runs about twice as fast. Water-like ripples, stronger glass look, and many fixes."
+  "version": "0.1.32",
+  "notes": "Move around the city freely: fly with WASD or the arrow keys (double-tap for speed, Space/C up and down), Shift + mouse to look around, and a smooth street view at ground level. No fog. Hold a building for a second to drag it, undo/redo every edit, pause and speed up the simulation. The city AI can now edit buildings and knows real places (\"make the buildings around this station pink\"). Facility colours, see-through agents, a settings window and a cleaner Settings dialog."
 }

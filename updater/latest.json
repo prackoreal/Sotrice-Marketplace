@@ -1,15 +1,15 @@
 {
-  "version": "0.1.31",
-  "notes": "A real city: pick a place and get real OpenStreetMap streets, buildings, terrain, tunnels and subway lines, with cars, pedestrians, trams and trains moving on the real network, in a new 3D view (plus 2D map and Grid). Back button in every full view, working area picker, AI key panel in the city settings (your key is now remembered). Efficiency / Performance / Adaptive modes, and the city runs about twice as fast. Water-like ripples, stronger glass look, and many fixes.",
-  "pub_date": "2026-10-17T09:24:47Z",
+  "version": "0.1.32",
+  "notes": "Move around the city freely: fly with WASD or the arrow keys (double-tap for speed, Space/C up and down), Shift + mouse to look around, and a smooth street view at ground level. No fog. Hold a building for a second to drag it, undo/redo every edit, pause and speed up the simulation. The city AI can now edit buildings and knows real places (\"make the buildings around this station pink\"). Facility colours, see-through agents, a settings window and a cleaner Settings dialog.",
+  "pub_date": "2026-10-17T15:15:38Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.31/Sotrice_0.1.31_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSbjBGL2JuZmVaQjk2bUhDTGpHVXJBOXRXTU5PZTJSUTc5Zm93eTJYaHhwRElqR0xaVnVGOTBmbDFYT1lrZEVxYWlXNURQN1ByOTVvK0l2YTcxQnhod0RueTdVcExIeVFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMjI4OTY0CWZpbGU6U290cmljZV8wLjEuMzFfeDY0LXNldHVwLmV4ZQpjeGE1Z1pldVNUdncxamYrMW9ZTnFySjlXUElkOVFiWjR1VlI5WGlLc21sWmFGYkdWaHNXTWM1R01qVklnSnBVdUJ1cWFWZjNBVkFsZUFZM2M3cXBCZz09Cg=="
+      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.32/Sotrice_0.1.32_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSbjBGL2JuZmVaQjZmYVhha0lRaS9EQ29IM0tOamVWQnZ5bUpqR2p2ZXg3elpvTG9XU3pxeWlKMlY1cXdxblVSSEVuajdiejNlZks4NXh5aEJZVWYzdXVVUCtkUEZUcGdJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMjUwMDA1CWZpbGU6U290cmljZV8wLjEuMzJfeDY0LXNldHVwLmV4ZQpNYjl4VW80eVFaSTlwbnRrZnc4citUUyt2anlvUEZBemhBY1piWlNDUmkwcG5XbnBVUkw5WWJkNnlQME5ITGpjUW1qTHhOL28rRit1bmZUbUxsR3lEQT09Cg=="
     },
     "windows-x86_64-nsis": {
-      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.31/Sotrice_0.1.31_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSbjBGL2JuZmVaQjk2bUhDTGpHVXJBOXRXTU5PZTJSUTc5Zm93eTJYaHhwRElqR0xaVnVGOTBmbDFYT1lrZEVxYWlXNURQN1ByOTVvK0l2YTcxQnhod0RueTdVcExIeVFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMjI4OTY0CWZpbGU6U290cmljZV8wLjEuMzFfeDY0LXNldHVwLmV4ZQpjeGE1Z1pldVNUdncxamYrMW9ZTnFySjlXUElkOVFiWjR1VlI5WGlLc21sWmFGYkdWaHNXTWM1R01qVklnSnBVdUJ1cWFWZjNBVkFsZUFZM2M3cXBCZz09Cg=="
+      "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases/download/app-v0.1.32/Sotrice_0.1.32_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSbjBGL2JuZmVaQjZmYVhha0lRaS9EQ29IM0tOamVWQnZ5bUpqR2p2ZXg3elpvTG9XU3pxeWlKMlY1cXdxblVSSEVuajdiejNlZks4NXh5aEJZVWYzdXVVUCtkUEZUcGdJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMjUwMDA1CWZpbGU6U290cmljZV8wLjEuMzJfeDY0LXNldHVwLmV4ZQpNYjl4VW80eVFaSTlwbnRrZnc4citUUyt2anlvUEZBemhBY1piWlNDUmkwcG5XbnBVUkw5WWJkNnlQME5ITGpjUW1qTHhOL28rRit1bmZUbUxsR3lEQT09Cg=="
     },
     "darwin-x86_64": {
       "url": "https://github.com/prackoreal/Sotrice-Marketplace/releases",
