@@ -23,6 +23,8 @@ from collections import defaultdict
 from typing import Any, Optional
 
 SCHEMA_VERSION = 1
+# Bumped whenever the converter emits new fields; cached datasets with an older revision are rebuilt from the cached OSM data.
+GENERATOR_REV = 2  # 2: alternative-language `names` on roads/stations/buildings/pois
 EARTH_R = 6371008.8
 ATTRIBUTION = "\u00a9 OpenStreetMap contributors"
 LICENSE = "ODbL 1.0 (https://www.openstreetmap.org/copyright)"
@@ -139,6 +141,20 @@ def osm_slot(material_tag: Any, colour_tag: Any, default_material: Optional[str]
     if material or colour:
         return slot(material or default_material, colour or default_colour, "osm", 0.9 if (material and colour) else 0.8)
     return slot(default_material, default_colour, "default", 0.15 if (default_material or default_colour) else 0.0)
+
+
+def names_field(tags: dict) -> dict:
+    """Alternative-language names for display: {"names": {"en", "de", "int", "latn"}} (only those present and different
+    from `name`), or {} when there are none. `latn` is a Latin transcription (name:latn / name:ja-Latn / name:ja_rm)."""
+    base = tags.get("name")
+    out = {}
+    for key, tag_keys in (("en", ("name:en",)), ("de", ("name:de",)), ("int", ("int_name",)), ("latn", ("name:latn", "name:ja-Latn", "name:ja_rm", "name:zh-Latn-pinyin"))):
+        for tk in tag_keys:
+            v = tags.get(tk)
+            if v and v != base:
+                out[key] = v
+                break
+    return {"names": out} if out else {}
 
 
 def r2(value: float) -> float:
@@ -528,7 +544,7 @@ def build_dataset(elements: list[dict], area: dict, terrain_grid: Optional[dict]
             road_slot["colour"] = SURFACE_COLOUR.get(road_slot["material"])
         rid = f"w{w['id']}"
         record = {
-            "id": rid, "osm_id": w["id"], "class": highway, "name": tags.get("name"), "ref": tags.get("ref"),
+            "id": rid, "osm_id": w["id"], "class": highway, "name": tags.get("name"), **names_field(tags), "ref": tags.get("ref"),
             "mode": "road" if is_car else "foot", **est, **level,
             "pts": [[r2(p[0]), r2(p[1])] for p in pts], "ys": ys, "node_ids": [str(i) if i else None for i in ids],
             "surfaces": {"road": {"surface_id": f"{rid}/road", **road_slot}},
@@ -563,7 +579,7 @@ def build_dataset(elements: list[dict], area: dict, terrain_grid: Optional[dict]
             pts, _ids = way_points(w, proj)
             if len(pts) >= 2:
                 centre = (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
-                platforms.append({"id": f"w{w['id']}", "ref": tags.get("ref"), "name": tags.get("name"), "pos": [r2(centre[0]), r2(centre[1])],
+                platforms.append({"id": f"w{w['id']}", "ref": tags.get("ref"), "name": tags.get("name"), "name_en": tags.get("name:en"), "pos": [r2(centre[0]), r2(centre[1])],
                                   "pts": [[r2(p[0]), r2(p[1])] for p in pts], "mode": _RAIL_MODES.get(tags.get("railway_mode") or "", None),
                                   "level": way_level(tags, "rail")["level"], "surface_id": f"w{w['id']}/platform"})
             continue
@@ -618,14 +634,14 @@ def build_dataset(elements: list[dict], area: dict, terrain_grid: Optional[dict]
         railway = tags.get("railway")
         pt = tags.get("public_transport")
         if railway == "subway_entrance":
-            entrances.append({"id": f"n{n['id']}", "name": tags.get("name"), "pos": [r2(x), r2(z)], "y": r2(terrain.elev(x, z)), "ref": tags.get("ref")})
+            entrances.append({"id": f"n{n['id']}", "name": tags.get("name"), "name_en": tags.get("name:en"), "pos": [r2(x), r2(z)], "y": r2(terrain.elev(x, z)), "ref": tags.get("ref")})
         elif railway in ("station", "halt", "tram_stop", "stop") or (pt in ("station",) and tags.get("railway")):
             mode = "subway" if (tags.get("station") == "subway" or tags.get("subway") == "yes") else "tram" if (railway == "tram_stop" or tags.get("tram") == "yes") else \
                    "light_rail" if (tags.get("station") == "light_rail" or tags.get("light_rail") == "yes") else "train"
             near = nearest_rail(x, z)
             underground = tags.get("location") == "underground" or tags.get("tunnel") == "yes" or bool(near and near["tunnel"]) or mode == "subway"
             stations.append({
-                "id": f"n{n['id']}", "osm_id": n["id"], "name": tags.get("name"), "mode": mode, "pos": [r2(x), r2(z)], "y": r2(terrain.elev(x, z)),
+                "id": f"n{n['id']}", "osm_id": n["id"], "name": tags.get("name"), "name_en": tags.get("name:en"), **names_field(tags), "mode": mode, "pos": [r2(x), r2(z)], "y": r2(terrain.elev(x, z)),
                 "underground": underground, "z_offset_m": (near["z_offset_m"] if near else (-12.0 if underground else 0.0)),
                 "ref": tags.get("ref"), "operator": tags.get("operator"), "network": tags.get("network"), "platform_ids": [], "entrance_ids": [],
             })
@@ -684,7 +700,7 @@ def build_dataset(elements: list[dict], area: dict, terrain_grid: Optional[dict]
         if not member_ways:
             continue
         lines.append({
-            "id": f"r{rel['id']}", "osm_id": rel["id"], "mode": "train" if route == "train" else route, "ref": tags.get("ref"), "name": tags.get("name"),
+            "id": f"r{rel['id']}", "osm_id": rel["id"], "mode": "train" if route == "train" else route, "ref": tags.get("ref"), "name": tags.get("name"), "name_en": tags.get("name:en"),
             "colour": parse_colour(tags.get("colour")) or None, "from": tags.get("from"), "to": tags.get("to"), "operator": tags.get("operator"),
             "network": tags.get("network"), "way_ids": [f"w{i}" for i in member_ways], "_stop_refs": stop_refs,
         })
@@ -801,7 +817,7 @@ def build_dataset(elements: list[dict], area: dict, terrain_grid: Optional[dict]
         roof = osm_slot(tags.get("roof:material"), tags.get("roof:colour"))
         is_part = bool(tags.get("building:part")) and not tags.get("building")
         record = {
-            "id": bid, "kind": "part" if is_part else "building", "type_raw": raw_type, "type": designation, "name": tags.get("name"),
+            "id": bid, "kind": "part" if is_part else "building", "type_raw": raw_type, "type": designation, "name": tags.get("name"), "name_en": tags.get("name:en"), **names_field(tags),
             "address": _address(tags), "footprint": {"outer": [[r2(p[0]), r2(p[1])] for p in outer], "holes": [[[r2(p[0]), r2(p[1])] for p in h] for h in holes]},
             "centroid": [r2(cx), r2(cz)], "area_m2": r2(abs(ring_area(outer)) - sum(abs(ring_area(h)) for h in holes)),
             "base_y": base_y, "height_m": r2(height), "height_source": h_source, "levels": levels, "min_height_m": r2(min_h),
@@ -895,14 +911,14 @@ def build_dataset(elements: list[dict], area: dict, terrain_grid: Optional[dict]
         if kind is None:
             continue
         x, z = proj.fwd(n["lat"], n["lon"])
-        pois.append({"id": f"n{n['id']}", "kind": kind, "subkind": sub, "name": tags.get("name"), "pos": [r2(x), r2(z)], "y": r2(terrain.elev(x, z)),
+        pois.append({"id": f"n{n['id']}", "kind": kind, "subkind": sub, "name": tags.get("name"), "name_en": tags.get("name:en"), **names_field(tags), "pos": [r2(x), r2(z)], "y": r2(terrain.elev(x, z)),
                      "opening_hours": tags.get("opening_hours"), "level": tags.get("level")})
     for b_tags_id, tags in ((f"w{w['id']}", w.get("tags") or {}) for w in ways.values()):
         kind, sub = _poi_kind(tags)
         if kind is None or b_tags_id not in by_id:
             continue
         b = by_id[b_tags_id]
-        pois.append({"id": b_tags_id, "kind": kind, "subkind": sub, "name": tags.get("name"), "pos": b["centroid"], "y": b["base_y"],
+        pois.append({"id": b_tags_id, "kind": kind, "subkind": sub, "name": tags.get("name"), "name_en": tags.get("name:en"), **names_field(tags), "pos": b["centroid"], "y": b["base_y"],
                      "opening_hours": tags.get("opening_hours"), "level": tags.get("level"), "building_id": b_tags_id})
     for p in pois:
         if "building_id" in p:
@@ -918,6 +934,7 @@ def build_dataset(elements: list[dict], area: dict, terrain_grid: Optional[dict]
     x1, z1 = proj.fwd(bbox["north"], bbox["east"])
     dataset = {
         "schema_version": SCHEMA_VERSION,
+        "generator_rev": GENERATOR_REV,
         "area": {
             "id": area["id"], "name": area.get("name") or area["id"], "origin": {"lat": origin["lat"], "lon": origin["lon"], "elev_m": (terrain_grid or {}).get("base_elev_m", 0.0)},
             "bbox": bbox, "extent_m": {"x0": r2(x0), "z0": r2(z0), "x1": r2(x1), "z1": r2(z1)}, "source": area.get("source", "osm"),

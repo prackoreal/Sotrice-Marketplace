@@ -55,7 +55,7 @@ class CityTraffic:
 
     # -- one step --------------------------------------------------------------------------------------
 
-    def tick(self, dt: float, settings: dict) -> list:
+    def tick(self, dt: float, settings: dict, publish: bool = True) -> list:
         sim, g = self.sim, self.guards
         self.tick_no += 1
         phys = settings.get("agent_type_physics", {})
@@ -75,6 +75,8 @@ class CityTraffic:
             if reason:
                 g._hit(f"walker {w.entity}", reason)
                 g.repair(sim, w)
+        if not publish:   # an intermediate sub-step of a fast-forward: only the last one publishes
+            return []
         out, self._pending = self._pending, []
         for a in self.cars:
             self._publish(out, a, "driving" if a.v > 0.3 else "waiting")

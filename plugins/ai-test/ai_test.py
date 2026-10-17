@@ -25,6 +25,15 @@ new idea):
   is the prompt's job, exactly like `context`. A request with no
   `attachments` key behaves byte-for-byte as it always has. See
   `normalize_attachments` for the validation limits.
+  OPTIONAL tool calling (additive; requests without these keys behave
+  exactly as before): `tools: [{name, description, parameters_schema}]`,
+  `history` (caller-owned turns after the first prompt turn, incl. prior
+  tool calls/results, see `normalize_history`), `system` (a system
+  instruction). When Gemini elects to call a tool, `ai_response` carries
+  `tool_call: {name, args, id, signature}`; the caller runs the tool and
+  sends the next request with the call + its result appended to
+  `history` (use a fresh request_id per step). `ai_response.usage` always
+  reports {prompt, output, total} tokens.
 - Calls the Gemini API for real (see `call_gemini`), on its OWN worker
   thread per request — NOT inline in the push-dispatch callback, since
   sotrice_client.py's dispatch thread is single and sequential (see its
@@ -290,14 +299,107 @@ def normalize_attachments(raw: Any) -> list[dict]:
     return parts
 
 
-def call_gemini(api_key: str, model: str, prompt: str, context: Optional[dict], attachments: Optional[list[dict]] = None) -> str:
-    """Makes one real, synchronous call to the Gemini API and returns the
-    model's plain text reply. Raises on any failure (bad key, network
-    error, empty response) — the caller decides how to turn that into an
-    `ai_response.error` string; this function's only job is "ask Gemini,
-    return text or raise."
+MAX_TOOLS = 24
+MAX_HISTORY_TURNS = 24
 
-    `attachments` is the already-validated output of `normalize_attachments`.
+
+def normalize_tools(raw: Any) -> Optional[list[dict]]:
+    """Validates a request's optional `tools` field — `[{name, description,
+    parameters_schema}]` — and returns Gemini's `tools` value (one
+    `functionDeclarations` group), or None when absent/empty. Raises
+    ValueError on garbage so it becomes an ordinary `ai_response.error`.
+    `parameters_schema` is plain JSON-schema (type/properties/required);
+    it is forwarded as Gemini's `parameters` untouched."""
+    if raw is None or raw == []:
+        return None
+    if not isinstance(raw, list):
+        raise ValueError("tools must be a list")
+    if len(raw) > MAX_TOOLS:
+        raise ValueError(f"too many tools ({len(raw)}, max {MAX_TOOLS})")
+    declarations = []
+    for index, tool in enumerate(raw):
+        if not isinstance(tool, dict) or not isinstance(tool.get("name"), str) or not tool["name"]:
+            raise ValueError(f"tool {index} needs a name")
+        declaration: dict = {"name": tool["name"], "description": str(tool.get("description") or "")}
+        schema = tool.get("parameters_schema")
+        if isinstance(schema, dict) and schema.get("properties"):
+            declaration["parameters"] = schema
+        declarations.append(declaration)
+    return [{"functionDeclarations": declarations}]
+
+
+def normalize_history(raw: Any) -> list[dict]:
+    """Converts a request's optional `history` into Gemini `contents`
+    turns. It is the conversation AFTER the first (prompt+context) user
+    turn, owned by the caller (this process stays stateless). Turn shapes:
+        {"role": "user"|"model", "text": "..."}
+        {"role": "model", "tool_call": {"name", "args", "id"?, "signature"?}}
+        {"role": "tool", "name": "...", "result": <any JSON>}
+    `signature` is the opaque `thoughtSignature` Gemini 3 attached to its
+    function call — the caller must echo it back untouched or Gemini
+    rejects the follow-up with a 400 (verified live, 2026-10-14)."""
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError("history must be a list")
+    if len(raw) > MAX_HISTORY_TURNS:
+        raise ValueError(f"history too long ({len(raw)}, max {MAX_HISTORY_TURNS})")
+    contents: list[dict] = []
+    for index, turn in enumerate(raw):
+        if not isinstance(turn, dict):
+            raise ValueError(f"history turn {index} must be an object")
+        role = turn.get("role")
+        if role in ("user", "model") and isinstance(turn.get("text"), str):
+            contents.append({"role": role, "parts": [{"text": turn["text"]}]})
+        elif role == "model" and isinstance(turn.get("tool_call"), dict):
+            call = turn["tool_call"]
+            function_call: dict = {"name": call.get("name"), "args": call.get("args") or {}}
+            if call.get("id"):
+                function_call["id"] = call["id"]
+            part: dict = {"functionCall": function_call}
+            if call.get("signature"):
+                part["thoughtSignature"] = call["signature"]
+            contents.append({"role": "model", "parts": [part]})
+        elif role == "tool" and isinstance(turn.get("name"), str):
+            response = {"functionResponse": {"name": turn["name"], "response": {"result": turn.get("result")}}}
+            # Consecutive tool results belong in ONE user turn (parallel calls).
+            if contents and contents[-1]["role"] == "user" and all("functionResponse" in p for p in contents[-1]["parts"]):
+                contents[-1]["parts"].append(response)
+            else:
+                contents.append({"role": "user", "parts": [response]})
+        else:
+            raise ValueError(f"history turn {index} has an unrecognized shape")
+    return contents
+
+
+def call_gemini(api_key: str, model: str, prompt: str, context: Optional[dict], attachments: Optional[list[dict]] = None) -> str:
+    """Plain-text convenience wrapper over `generate` — the original
+    signature, kept for any caller that only wants text."""
+    result = generate(api_key, model, prompt, context, attachments)
+    if not result["text"]:
+        raise RuntimeError("Gemini returned no text")
+    return result["text"]
+
+
+def generate(
+    api_key: str,
+    model: str,
+    prompt: str,
+    context: Optional[dict],
+    attachments: Optional[list[dict]] = None,
+    tools: Optional[list[dict]] = None,
+    history: Optional[list[dict]] = None,
+    system: Optional[str] = None,
+) -> dict:
+    """Makes one real, synchronous call to the Gemini API. Returns
+    `{"text": str|None, "tool_call": {name,args,id,signature}|None,
+    "usage": {prompt,output,total}}`. Raises on any failure (bad key,
+    network error, empty response) — the caller decides how to turn that
+    into an `ai_response.error` string.
+
+    `attachments`/`tools`/`history` are the already-validated outputs of
+    the `normalize_*` helpers. When Gemini elects to call a tool the
+    result carries `tool_call`; any text emitted alongside stays in `text`.
 
     Deliberately stdlib-only (`urllib.request`, not `requests` or the
     `google-genai` SDK) — every other plugin in this codebase runs under
@@ -310,13 +412,21 @@ def call_gemini(api_key: str, model: str, prompt: str, context: Optional[dict], 
         # The calling spin already decided what belongs in `context` —
         # this just makes sure Gemini actually sees it, not just the
         # bare prompt. Plain JSON, not prose, so structure survives.
-        full_prompt = f"{prompt}\n\nContext:\n{json.dumps(context)}"
+        # Compact separators: every token counts (Gemini bills for real).
+        full_prompt = f"{prompt}\n\nContext:\n{json.dumps(context, separators=(',', ':'))}"
 
     # Media parts come BEFORE the text instruction — Gemini's own
     # guidance for multimodal prompts, and it keeps "what to do with the
     # attached audio/image" as the last thing the model reads.
     parts = list(attachments or []) + [{"text": full_prompt}]
-    body = json.dumps({"contents": [{"parts": parts}]}).encode("utf-8")
+    contents = [{"role": "user", "parts": parts}] if history else [{"parts": parts}]
+    contents.extend(history or [])
+    request_body: dict = {"contents": contents}
+    if tools:
+        request_body["tools"] = tools
+    if system:
+        request_body["systemInstruction"] = {"parts": [{"text": system}]}
+    body = json.dumps(request_body).encode("utf-8")
     endpoint = GEMINI_ENDPOINT_TEMPLATE.format(model=model)
     request = urllib.request.Request(
         f"{endpoint}?key={api_key}",
@@ -341,11 +451,28 @@ def call_gemini(api_key: str, model: str, prompt: str, context: Optional[dict], 
     candidates = payload.get("candidates") or []
     if not candidates:
         raise RuntimeError(f"Gemini returned no candidates: {payload}")
-    parts = candidates[0].get("content", {}).get("parts") or []
-    text = "".join(part.get("text", "") for part in parts)
-    if not text:
+    response_parts = candidates[0].get("content", {}).get("parts") or []
+    text = "".join(part.get("text", "") for part in response_parts) or None
+    tool_call = None
+    for part in response_parts:
+        function_call = part.get("functionCall")
+        if function_call:
+            tool_call = {
+                "name": function_call.get("name"),
+                "args": function_call.get("args") or {},
+                "id": function_call.get("id"),
+                "signature": part.get("thoughtSignature"),
+            }
+            break
+    if not text and not tool_call:
         raise RuntimeError(f"Gemini returned an empty response: {payload}")
-    return text
+    usage_raw = payload.get("usageMetadata") or {}
+    usage = {
+        "prompt": usage_raw.get("promptTokenCount", 0),
+        "output": usage_raw.get("candidatesTokenCount", 0),
+        "total": usage_raw.get("totalTokenCount", 0),
+    }
+    return {"text": text, "tool_call": tool_call, "usage": usage}
 
 
 class Settings:
@@ -431,8 +558,11 @@ def main():
             request_id = value.get("request_id")
             context = value.get("context")
             task_hint = value.get("task_hint")
+            system = value.get("system") if isinstance(value.get("system"), str) else None
             try:
                 attachments = normalize_attachments(value.get("attachments"))
+                tools = normalize_tools(value.get("tools"))
+                history = normalize_history(value.get("history"))
             except ValueError as exc:
                 # A malformed attachment gets a real, immediate error
                 # response (not a silent drop, which would leave the
@@ -442,7 +572,7 @@ def main():
                 world.set_attribute(
                     entity,
                     "ai_response",
-                    {"request_id": request_id, "text": None, "model": None, "error": f"bad attachments: {exc}"},
+                    {"request_id": request_id, "text": None, "model": None, "error": f"bad request: {exc}"},
                 )
                 return
 
@@ -463,7 +593,7 @@ def main():
             # dispatch thread.
             threading.Thread(
                 target=_answer_request,
-                args=(world, name, settings, entity, request_id, prompt, context, task_hint, attachments),
+                args=(world, name, settings, entity, request_id, prompt, context, task_hint, attachments, tools, history, system),
                 daemon=True,
             ).start()
 
@@ -487,6 +617,9 @@ def _answer_request(
     context: Optional[dict],
     task_hint: Any,
     attachments: Optional[list[dict]] = None,
+    tools: Optional[list[dict]] = None,
+    history: Optional[list[dict]] = None,
+    system: Optional[str] = None,
 ):
     started = time.perf_counter()
     api_key, cost_bias = settings.snapshot()
@@ -500,7 +633,7 @@ def _answer_request(
         return
 
     try:
-        text = call_gemini(api_key, model, prompt, context, attachments)
+        result = generate(api_key, model, prompt, context, attachments, tools, history, system)
     except (urllib.error.URLError, RuntimeError, ValueError) as exc:
         print(f"[{name}] Gemini call failed for entity {entity}: {exc!r}")
         world.set_attribute(
@@ -511,12 +644,15 @@ def _answer_request(
         return
 
     elapsed = time.perf_counter() - started
-    print(f"[{name}] answered entity {entity}'s request in {elapsed:.2f}s ({len(text)} chars, model {model})")
-    world.set_attribute(
-        entity,
-        "ai_response",
-        {"request_id": request_id, "text": text, "model": model, "error": None},
+    text = result["text"]
+    print(
+        f"[{name}] answered entity {entity}'s request in {elapsed:.2f}s "
+        f"({len(text or '')} chars, tool_call={bool(result['tool_call'])}, model {model}, tokens {result['usage']['total']})"
     )
+    response = {"request_id": request_id, "text": text, "model": model, "error": None, "usage": result["usage"]}
+    if result["tool_call"]:
+        response["tool_call"] = result["tool_call"]
+    world.set_attribute(entity, "ai_response", response)
 
 
 if __name__ == "__main__":

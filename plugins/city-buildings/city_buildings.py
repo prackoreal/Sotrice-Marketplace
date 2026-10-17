@@ -29,11 +29,14 @@ original small demo extract in city_roads_data/ is used, labelled as such.
 Registered in plugins/registry.json as "city-buildings".
 """
 
+import copy
 import json
 import os
 import threading
 import time
 
+import agent_core
+import city_agent
 import citydata_store as store
 from sotrice_client import World
 
@@ -148,7 +151,7 @@ def load_area_buildings(area: str):
     if ds is not None:
         return store.legacy_buildings(ds), {
             "attribution": ds["area"]["attribution"], "license": ds["area"]["license"],
-            "area_description": f"{ds['area']['name']} \u2014 real OpenStreetMap data", "real": True,
+            "area_description": f"{ds['area']['name']} \u2014 real OpenStreetMap data", "real": True, "ds": ds,
         }
     path = os.path.join(DATA_DIR, f"{area}_buildings.json")
     if not os.path.exists(path):
@@ -156,6 +159,10 @@ def load_area_buildings(area: str):
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     return data["buildings"], {"attribution": data["attribution"], "license": data["license"], "area_description": data["area_description"] + " (small demo extract)", "real": False}
+
+
+HISTORY_LIMIT = 100
+SLOT_KEYS = ("material", "colour", "source", "confidence")
 
 
 class BuildingPublisher:
@@ -168,6 +175,15 @@ class BuildingPublisher:
         self.area = None
         self.overlay: dict = {}
         self.lock = threading.RLock()
+        self.view_state: dict = {}            # latest `city_view_state` from the city view (what the user looks at)
+        self.knowledge = None                 # city_agent.CityKnowledge for the active area
+        self.city_control = None              # city-data's control entity (surface patches / building_changed go there)
+        self.entity_of_id: dict = {}          # legacy building id -> entity
+        # Undo/redo: one step per edit command (a move, a field edit, one AI/voice command). Each change keeps the
+        # building plus the overlay values / colour slots before and after, so both directions re-apply the same way.
+        self.undo_stack: list = []
+        self.redo_stack: list = []
+        self.slot_cache: dict = {}            # surface_id -> last slot THIS plugin wrote (the surfaces on the building dict go stale)
 
     # --- publishing -------------------------------------------------------------------
 
@@ -178,6 +194,8 @@ class BuildingPublisher:
         buildings, meta = loaded
         with self.lock:
             self.area = area
+            self.undo_stack, self.redo_stack, self.slot_cache = [], [], {}
+            self._publish_history()
             self.overlay = load_buildings_overlay(area)
             for building in buildings:
                 moved = self.overlay.get(building["id"])
@@ -186,6 +204,7 @@ class BuildingPublisher:
                         if key in moved:
                             building[key] = moved[key]
             self.building_by_entity = {}
+            self.entity_of_id = {}
             while len(self.pool) < len(buildings):
                 self.pool.append(self.world.create_entity())
             real_heights = sum(1 for b in buildings if b["height_source"] == "tag")
@@ -200,12 +219,14 @@ class BuildingPublisher:
             for index, building in enumerate(buildings):
                 entity = self.pool[index]
                 self.building_by_entity[entity] = building
+                self.entity_of_id[building["id"]] = entity
                 updates.extend(self._attributes(entity, building))
                 if not building.get("wall_material"):
                     unknown.append((entity, building))
                 if len(updates) >= BATCH:
                     self.world.set_many(updates)
                     updates = []
+            self.knowledge = city_agent.CityKnowledge(meta["ds"], {b["id"]: b for b in buildings}) if meta.get("ds") else None
             for entity in self.pool[len(buildings):]:
                 updates.extend([(entity, "kind", "retired"), (entity, "building_footprint", [])])
             if updates:
@@ -266,9 +287,14 @@ class BuildingPublisher:
 
     # --- handlers ----------------------------------------------------------------------
 
+    def on_view_state(self, entity, attribute, value, source):
+        if isinstance(value, dict):
+            self.view_state = value
+
     def on_dataset(self, entity, attribute, value, source):
         if not isinstance(value, dict) or value.get("status") != "ready":
             return
+        self.city_control = entity
         area = (value.get("area") or {}).get("id")
         if area and area != self.area:
             self.load(area)
@@ -285,6 +311,169 @@ class BuildingPublisher:
         material = text.strip().split()[0].strip(".,").lower()
         self.world.set_attribute(entity, "building_material", material)
         self.world.set_attribute(entity, "building_material_source", "ai")
+
+    # --- undo / redo -------------------------------------------------------------------
+
+    def _publish_history(self) -> None:
+        self.world.set_attribute(self.control, "building_history_state", {
+            "can_undo": bool(self.undo_stack), "can_redo": bool(self.redo_stack),
+            "undo_label": self.undo_stack[-1]["label"] if self.undo_stack else None,
+            "redo_label": self.redo_stack[-1]["label"] if self.redo_stack else None,
+        })
+
+    def _push_step(self, label: str, changes: list) -> None:
+        if not changes:
+            return
+        self.undo_stack.append({"label": label, "changes": changes})
+        del self.undo_stack[:-HISTORY_LIMIT]
+        self.redo_stack.clear()
+        self._publish_history()
+
+    def _slot_now(self, building: dict, part: str):
+        slot = (building.get("surfaces") or {}).get(part) or {}
+        sid = slot.get("surface_id")
+        if not sid:
+            return None
+        return sid, dict(self.slot_cache.get(sid) or {k: slot.get(k) for k in SLOT_KEYS})
+
+    def _restore(self, step: dict, which: str) -> None:
+        """Re-applies one side ("before" to undo, "after" to redo) of a step through the same publish + persist +
+        city-data patch route as a normal edit."""
+        with self.lock:
+            updates, ids, patches = [], [], []
+            for ch in step["changes"]:
+                b = ch["building"]
+                entity = self.entity_of_id.get(b["id"])
+                for key, value in ch["values"][which].items():
+                    value = copy.deepcopy(value)
+                    b[key] = value
+                    self.overlay.setdefault(b["id"], {})[key] = value
+                    if entity is None:
+                        continue
+                    if key == "position":
+                        updates.append((entity, "building_position", {"x": value["x"], "y": 0.0, "z": value["z"]}))
+                    elif key == "footprint":
+                        updates.append((entity, "building_footprint", value))
+                    else:
+                        field = self._field_of(key)
+                        if field:
+                            updates.append((entity, field, value))
+                            if field == "building_material":
+                                updates.append((entity, "building_material_source", "history"))
+                ids.append(b["id"])
+                for sid, pair in (ch.get("slots") or {}).items():
+                    slot = pair[which]
+                    clean = {"material": slot.get("material"), "colour": slot.get("colour"), "source": slot.get("source") or "default", "confidence": slot.get("confidence") or 0.0}
+                    patches.append({"surface_id": sid, "slot": clean, "force": True})
+                    self.slot_cache[sid] = dict(slot)
+            for i in range(0, len(updates), BATCH):
+                self.world.set_many(updates[i:i + BATCH])
+            save_buildings_overlay(self.area, self.overlay)
+            if self.city_control is not None:
+                self.world.set_attribute(self.city_control, "city_building_changed", {"ids": ids})
+                for i in range(0, len(patches), 100):
+                    self.world.set_attribute(self.city_control, "city_surface_patch", {"patches": patches[i:i + 100], "batch_id": f"history-{int(time.time() * 1000)}-{i}"})
+
+    def on_history_request(self, entity, attribute, value, source):
+        """The city view's Undo / Redo (Ctrl+Z / Ctrl+Y): {"action": "undo"|"redo", "nonce": any}."""
+        if not isinstance(value, dict):
+            return
+        action = value.get("action")
+        with self.lock:
+            ok, message = False, "Nothing to " + str(action)
+            if action == "undo" and self.undo_stack:
+                step = self.undo_stack.pop()
+                self._restore(step, "before")
+                self.redo_stack.append(step)
+                ok, message = True, "Undid: " + step["label"]
+            elif action == "redo" and self.redo_stack:
+                step = self.redo_stack.pop()
+                self._restore(step, "after")
+                self.undo_stack.append(step)
+                ok, message = True, "Redid: " + step["label"]
+            self._publish_history()
+            self.world.set_attribute(self.control, "building_history_result", {"nonce": value.get("nonce"), "ok": ok, "message": message})
+            print(f"[{self.name}] history {action}: {message}")
+
+    # --- shared, validated apply paths (the AI agent uses these; the UI paths below keep their own handlers) ---
+
+    def edit_fields(self) -> dict:
+        return ALLOWED_EDIT_FIELDS
+
+    def _field_of(self, overlay_key: str):
+        for field, spec in ALLOWED_EDIT_FIELDS.items():
+            if spec["overlay_key"] == overlay_key:
+                return field
+        return None
+
+    def apply_building_edits(self, items, colour=None) -> str:
+        """items: [(building, {overlay_key: validated value})]. Publishes the legacy attributes, persists ONE
+        overlay write, tells city-data (tiles) and patches wall+roof colour slots (source "user")."""
+        with self.lock:
+            updates, ids, changes = [], [], []
+            for building, fields in items:
+                slots = {}
+                if colour:
+                    for part in ("wall", "roof"):
+                        now = self._slot_now(building, part)
+                        if now:
+                            slots[now[0]] = {"before": now[1], "after": dict(now[1], colour=colour, source="user", confidence=1.0)}
+                if fields or slots:
+                    changes.append({"building": building, "values": {"before": {k: copy.deepcopy(building.get(k)) for k in fields}, "after": copy.deepcopy(fields)}, "slots": slots})
+            for building, fields in items:
+                entity = self.entity_of_id.get(building["id"])
+                for overlay_key, value in fields.items():
+                    building[overlay_key] = value
+                    self.overlay.setdefault(building["id"], {})[overlay_key] = value
+                    field = self._field_of(overlay_key)
+                    if entity is not None and field:
+                        updates.append((entity, field, value))
+                        if field == "building_material":
+                            updates.append((entity, "building_material_source", "agent_edit"))
+                ids.append(building["id"])
+            for i in range(0, len(updates), BATCH):
+                self.world.set_many(updates[i:i + BATCH])
+            if any(fields for _b, fields in items):
+                save_buildings_overlay(self.area, self.overlay)
+            if self.city_control is not None and any(fields for _b, fields in items):
+                self.world.set_attribute(self.city_control, "city_building_changed", {"ids": ids})
+            painted = 0
+            if colour and self.city_control is not None:
+                patches = []
+                for building, _f in items:
+                    for part in ("wall", "roof"):
+                        slot = (building.get("surfaces") or {}).get(part) or {}
+                        if slot.get("surface_id"):
+                            patches.append({"surface_id": slot["surface_id"], "slot": {"colour": colour, "source": "user", "confidence": 1.0}, "force": True})
+                for i in range(0, len(patches), 100):
+                    self.world.set_attribute(self.city_control, "city_surface_patch", {"patches": patches[i:i + 100], "batch_id": f"agent-{int(time.time() * 1000)}-{i}"})
+                painted = len(patches)
+                for ch in changes:
+                    for sid, pair in ch["slots"].items():
+                        self.slot_cache[sid] = dict(pair["after"])
+            else:
+                for ch in changes:
+                    ch["slots"] = {}
+            self._push_step(f"AI edit ({len(items)} building{'s' if len(items) != 1 else ''})", changes)
+            print(f"[{self.name}] agent edit: {len(items)} building(s), {painted} colour slot(s)")
+            return f"{len(items)} buildings updated" + (f", {painted} surfaces painted" if painted else "")
+
+    def move_building_by(self, building, dx: float, dz: float) -> str:
+        with self.lock:
+            entity = self.entity_of_id.get(building["id"])
+            old = building["position"]
+            new_position = {"x": old["x"] + dx, "z": old["z"] + dz}
+            new_footprint = [{"x": q["x"] + dx, "z": q["z"] + dz} for q in building["footprint"]]
+            self._push_step("Move building", [{"building": building, "values": {"before": {"position": copy.deepcopy(old), "footprint": copy.deepcopy(building["footprint"])}, "after": {"position": copy.deepcopy(new_position), "footprint": copy.deepcopy(new_footprint)}}}])
+            building["position"], building["footprint"] = new_position, new_footprint
+            if entity is not None:
+                self.world.set_many([(entity, "building_position", {"x": new_position["x"], "y": 0.0, "z": new_position["z"]}), (entity, "building_footprint", new_footprint)])
+            record = self.overlay.setdefault(building["id"], {})
+            record["position"], record["footprint"] = new_position, new_footprint
+            save_buildings_overlay(self.area, self.overlay)
+            if self.city_control is not None:
+                self.world.set_attribute(self.city_control, "city_building_changed", {"ids": [building["id"]]})
+            return f"moved building {building['id']}"
 
     def on_move_request(self, entity, attribute, value, source):
         """Sandbox mode: rendering-test-ui writes this on a mouse drag-drop. The
@@ -303,6 +492,8 @@ class BuildingPublisher:
             dx, dz = new_x - old["x"], new_z - old["z"]
             new_position = {"x": new_x, "z": new_z}
             new_footprint = [{"x": p["x"] + dx, "z": p["z"] + dz} for p in building["footprint"]]
+            if abs(dx) + abs(dz) > 0.01:
+                self._push_step("Move building", [{"building": building, "values": {"before": {"position": copy.deepcopy(old), "footprint": copy.deepcopy(building["footprint"])}, "after": {"position": copy.deepcopy(new_position), "footprint": copy.deepcopy(new_footprint)}}}])
             building["position"] = new_position
             building["footprint"] = new_footprint
             self.world.set_attribute(entity, "building_position", {"x": new_x, "y": 0.0, "z": new_z})
@@ -337,6 +528,7 @@ class BuildingPublisher:
                 self.world.set_attribute(entity, "building_edit_result", {"request_id": request_id, "ok": False, "message": result})
                 return
             overlay_key = spec["overlay_key"]
+            self._push_step(f"Edit {field.replace('building_', '')}", [{"building": building, "values": {"before": {overlay_key: copy.deepcopy(building.get(overlay_key))}, "after": {overlay_key: copy.deepcopy(result)}}}])
             building[overlay_key] = result
             self.world.set_attribute(entity, field, result)
             if field == "building_material":
@@ -355,10 +547,18 @@ def main():
         world.subscribe("ai_response", pub.on_ai_response, replay=True)
         world.subscribe("building_move_request", pub.on_move_request, replay=True)
         world.subscribe("building_edit_request", pub.on_edit_request, replay=True)
+        world.subscribe("building_history_request", pub.on_history_request)
         world.subscribe("city_dataset", pub.on_dataset, replay=True)
+        world.subscribe("city_view_state", pub.on_view_state, replay=True)
         area = active_area()
         if not pub.load(area):
             print(f"[{name}] no data for area {area!r} yet - waiting for city-data to download it (city_dataset)")
+        # The city AI agent (agent_core.SpinAgent): sees only its allowlist (area aggregate + what the user looks at),
+        # edits only through the validated paths above. Control entity = this plugin's own control entity.
+        allowlist, context, tools, system = city_agent.make_agent_parts(pub)
+        agent = agent_core.SpinAgent(world, spin_id="city", label="City", allowlist=allowlist, context_provider=context, tools=tools, system_prompt=system, control_entity=pub.control)
+        agent.start()
+        print(f"[{name}] city agent ready: tools {sorted(agent.tools)}")
         try:
             while True:
                 time.sleep(3600)

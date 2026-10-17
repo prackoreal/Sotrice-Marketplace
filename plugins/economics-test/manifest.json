@@ -1,6 +1,6 @@
 {
   "type": "economics-test",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Economics spin skeleton — proves the wiring, not a real economic model yet. Watches city-buildings' building_position/building_type/building_goods_price_eur and city-roads' road_network (no enumeration, pure subscribe-by-name) and publishes back onto each building's OWN entity: building_road_distance_m/building_nearest_road_name (real, static, distance to the nearest real road node), building_traffic_visits_count (a real counter of how often any other entity's position comes within range, with a per-mover cooldown), and building_revenue_estimate_eur (price times traffic, for buildings whose type is \"shop\" and that have a price set — the first real per-building editable-economics metric). Has no idea whether city-roads/city-buildings/physics-test are even running.",
   "concepts": [
     "Economics"

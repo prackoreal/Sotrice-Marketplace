@@ -194,6 +194,7 @@ def main():
         # Compute mode (Efficiency/Performance/Adaptive): fewer, larger steps at a
         # lower update-rate budget -- same speed along the line, less work.
         compute = world.compute_mode("transit-sim")
+        clock = world.sim_clock()   # play/pause + speed from the city view
         guard_control = world.create_entity()
         world.set_attribute(guard_control, "kind", "transit_guard_control")
         tick_no = 0
@@ -221,7 +222,8 @@ def main():
 
         try:
             while True:
-                dt = compute.interval(base_dt)
+                real_dt = compute.interval(base_dt)
+                dt = real_dt * clock.scale()
                 if rail_state["rebuild"]:
                     rail_state["rebuild"] = False
                     rebuild_services()
@@ -253,7 +255,7 @@ def main():
                 for entity, shuttle in shuttles.items():
                     x, y, z = shuttle.step(dt)
                     world.set_attribute(entity, "position", {"x": x, "y": y, "z": z})
-                time.sleep(dt)
+                time.sleep(real_dt)
         except KeyboardInterrupt:
             print(f"[{name}] stopped")
 

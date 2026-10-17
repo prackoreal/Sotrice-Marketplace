@@ -113,7 +113,9 @@ def build_area(area: dict, progress, force: bool = False) -> tuple[dict, dict]:
     if store.has_dataset(area["id"]) and not force:
         progress("process", 0, 1, "Loading from cache")
         ds = store.load_dataset(area["id"])
-        return ds, {"hit": True, "seconds": round(time.time() - started, 2)}
+        if ds is not None and ds.get("generator_rev", 1) >= osm_city.GENERATOR_REV:
+            return ds, {"hit": True, "seconds": round(time.time() - started, 2)}
+        # older converter output: rebuild below from the cached OSM download (no new download unless the cache is gone)
     directory = store.area_dir(area["id"])
     elements, info = osm_fetch.fetch_features(directory, area["bbox"], lambda p, a, b, m=None: progress(p, a, b, m), force=force)
     proj = osm_city.Projection(area["origin"]["lat"], area["origin"]["lon"])
@@ -126,6 +128,38 @@ def build_area(area: dict, progress, force: bool = False) -> tuple[dict, dict]:
     )
     osm_fetch.write_json_gz(store.dataset_path(area["id"]), dataset)
     return dataset, {"hit": False, "seconds": round(time.time() - started, 2)}
+
+
+def apply_building_overlay(ds: dict, overlay: dict) -> int:
+    """Applies the sandbox/agent edits of city-buildings (overlay_buildings.json, keyed by the legacy building
+    id = OSM way id without the leading "w") to the dataset's buildings IN MEMORY (the cached dataset on disk is
+    never touched): height, name, type, wall material, and a moved footprint. Returns how many were applied."""
+    if not overlay:
+        return 0
+    by_legacy = {(b["id"][1:] if b["id"].startswith("w") else b["id"]): b for b in ds["buildings"]}
+    n = 0
+    for lid, rec in overlay.items():
+        b = by_legacy.get(lid)
+        if b is None or not isinstance(rec, dict):
+            continue
+        if isinstance(rec.get("height_m"), (int, float)):
+            b["height_m"] = float(rec["height_m"])
+            b["height_source"] = "user"
+        if isinstance(rec.get("name"), str):
+            b["name"] = rec["name"]
+        if isinstance(rec.get("building_type"), str):
+            b["type"] = rec["building_type"]
+        if isinstance(rec.get("wall_material"), str):
+            wall = b.setdefault("surfaces", {}).setdefault("wall", {})
+            wall["material"], wall["source"] = rec["wall_material"], "user"
+        fp = rec.get("footprint")
+        if isinstance(fp, list) and len(fp) >= 3 and all(isinstance(q, dict) and "x" in q and "z" in q for q in fp):
+            b["footprint"]["outer"] = [[q["x"], q["z"]] for q in fp]
+            pos = rec.get("position")
+            if isinstance(pos, dict) and "x" in pos and "z" in pos:
+                b["centroid"] = [pos["x"], pos["z"]]
+        n += 1
+    return n
 
 
 def partition_tiles(ds: dict) -> dict[tuple[int, int], dict]:
@@ -250,6 +284,9 @@ class CityData:
         self.area_id: Optional[str] = None
         self._last_progress = 0.0
         self.cancel = threading.Event()
+        self.ds: Optional[dict] = None  # the dataset as published (overlay edits applied)
+        self.tile_hash: dict[tuple[int, int], int] = {}
+        self.tile_entity_of: dict[tuple[int, int], int] = {}
         self.last_dataset: Optional[dict] = None  # last READY city_dataset payload, restored after a failed/cancelled load
 
     # --- publishing helpers ---------------------------------------------------------
@@ -289,6 +326,10 @@ class CityData:
     def publish(self, ds: dict, cache_info: dict) -> None:
         area_meta = ds["area"]
         self.area_id = area_meta["id"]
+        applied = apply_building_overlay(ds, store.load_overlay(area_meta["id"], "buildings", None, {}))
+        if applied:
+            print(f"[{self.name}] applied {applied} saved building edit(s) from the overlay")
+        self.ds = ds
         self._set_status("loading", area_meta, counts=ds.get("counts", {}))
         self.progress("publish", 0, 1, "Publishing to the city")
         surfaces = self.load_surfaces(area_meta["id"])
@@ -304,6 +345,8 @@ class CityData:
         ])
         tiles = partition_tiles(ds)
         keys = sorted(tiles)
+        self.tile_hash = {k: hash(json.dumps(tiles[k]["ct_buildings"], sort_keys=True)) for k in keys}
+        self.tile_entity_of = {k: self.tile_entities[i] for i, k in enumerate(keys)} if len(self.tile_entities) >= len(keys) else {}
         while len(self.tile_entities) < len(keys):
             self.tile_entities.append(self.world.create_entity())
         updates = []
@@ -317,6 +360,7 @@ class CityData:
             if len(updates) > 40:
                 self.world.set_many(updates)
                 updates = []
+        self.tile_entity_of = {k: self.tile_entities[i] for i, k in enumerate(keys)}
         for entity in self.tile_entities[len(keys):]:
             updates.append((entity, "ct_tile", {"id": None, "retired": True}))
             updates.extend([(entity, "ct_roads", []), (entity, "ct_rail_ways", []), (entity, "ct_buildings", []), (entity, "ct_ground", {"areas": [], "lines": [], "trees": []}), (entity, "ct_pois", [])])
@@ -383,6 +427,26 @@ class CityData:
                 self.world.set_attribute(self.control, "city_surfaces", dict(self.surfaces))
             self.world.set_attribute(self.control, "city_surface_ack", {"batch_id": value.get("batch_id"), "accepted": accepted, "rejected": rejected[:50], "rejected_count": len(rejected)})
 
+    def on_building_changed(self, entity: int, attribute: str, value, source) -> None:
+        """`city_building_changed` {ids?: [legacy ids]} (write on the control entity): city-buildings validated and
+        saved an edit in the shared overlay; re-apply it to the dataset and republish ONLY the tiles whose
+        `ct_buildings` changed, so every renderer (3D city view included) shows height / name / type / material /
+        move edits. Colours travel as surface patches instead (city_surface_patch)."""
+        if entity != self.control or not self.ds or not self.area_id:
+            return
+        with self.lock:
+            apply_building_overlay(self.ds, store.load_overlay(self.area_id, "buildings", None, {}))
+            tiles = partition_tiles(self.ds)
+            updates = []
+            for key, data in tiles.items():
+                h = hash(json.dumps(data["ct_buildings"], sort_keys=True))
+                if self.tile_hash.get(key) != h and key in self.tile_entity_of:
+                    self.tile_hash[key] = h
+                    updates.append((self.tile_entity_of[key], "ct_buildings", data["ct_buildings"]))
+            if updates:
+                self.world.set_many(updates)
+            self.world.set_attribute(self.control, "city_building_ack", {"ids": (value or {}).get("ids") if isinstance(value, dict) else None, "tiles_updated": len(updates)})
+
     # --- area requests ------------------------------------------------------------------------
 
     def on_cancel(self, entity: int, attribute: str, value, source) -> None:
@@ -441,6 +505,7 @@ def main():
         city.publish_areas()
         world.subscribe("city_area_request", city.on_area_request)
         world.subscribe("city_surface_patch", city.on_surface_patch)
+        world.subscribe("city_building_changed", city.on_building_changed)
         world.subscribe("city_area_cancel", city.on_cancel)
         threading.Thread(target=city.worker, daemon=True).start()
         active = store.read_active()

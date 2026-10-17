@@ -256,6 +256,30 @@ class ComputeMode:
             callback(self)
 
 
+class SimClock:
+    """Live view of the shared simulation clock: the `sim_time` Core attribute ({"paused": bool, "speed": float})
+    that the city view's play/pause + speed buttons write. A simulation multiplies its step by `scale()` (0 while
+    paused) and keeps sleeping in real time, so the world runs faster/slower or stands still without changing its rate."""
+
+    MAX_SPEED = 20.0
+
+    def __init__(self) -> None:
+        self.paused = False
+        self.speed = 1.0
+
+    def scale(self) -> float:
+        return 0.0 if self.paused else self.speed
+
+    def _apply(self, value: Any) -> None:
+        if not isinstance(value, dict):
+            return
+        self.paused = bool(value.get("paused", self.paused))
+        try:
+            self.speed = max(0.05, min(self.MAX_SPEED, float(value.get("speed", self.speed))))
+        except (TypeError, ValueError):
+            pass
+
+
 class World:
     """A connection to a running sotrice-server, and the operations a
     plugin can perform on the Core through it: create entities, set and
@@ -530,6 +554,12 @@ class World:
         cm = ComputeMode(plugin_type)
         self.subscribe("compute_mode", lambda _e, _n, value, _s: cm._apply(value), replay=True)
         return cm
+
+    def sim_clock(self) -> "SimClock":
+        """A live SimClock (play/pause + speed set from the city view); replays the current value on subscribe."""
+        clock = SimClock()
+        self.subscribe("sim_time", lambda _e, _n, value, _s: clock._apply(value), replay=True)
+        return clock
 
     def list_plugins(self) -> list[dict[str, str]]:
         """Plugin types available to start, read fresh from the server's

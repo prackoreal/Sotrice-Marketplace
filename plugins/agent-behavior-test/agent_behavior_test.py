@@ -576,6 +576,7 @@ def main():
         print(f"[{name}] running at {DECISION_HZ}Hz — Ctrl+C to stop")
         # Compute mode: decide less often (with proportionally larger steps) under a lower budget.
         compute = world.compute_mode("agent-behavior-test")
+        clock = world.sim_clock()   # play/pause + speed from the city view
         try:
             while True:
                 with state_lock:
@@ -666,7 +667,13 @@ def main():
                     now = time.time()
                     dt_real = min(0.25, now - city_state.get("last_tick", now - 1.0 / DECISION_HZ))
                     city_state["last_tick"] = now
-                    updates = traffic.tick(dt_real, live_copy)
+                    # sim time = real time x speed (0 while paused); big steps are cut into <= 0.25 s sub-steps so
+                    # car following / collision guards stay as safe at 10x as at 1x
+                    sim_dt = dt_real * clock.scale()
+                    n_sub = max(1, math.ceil(sim_dt / 0.25))
+                    updates = []
+                    for k in range(n_sub):
+                        updates.extend(traffic.tick(sim_dt / n_sub, live_copy, publish=(k == n_sub - 1)))
                     for i in range(0, len(updates), 600):
                         world.set_many(updates[i:i + 600])
                     if traffic.tick_no % 20 == 0:
@@ -689,7 +696,7 @@ def main():
                     distance = math.hypot(dx, dz)
 
                     physics = current_physics[agent_type]
-                    dt = compute.interval(1.0 / DECISION_HZ)
+                    dt = compute.interval(1.0 / DECISION_HZ) * clock.scale()
                     speed = own_speeds[agent_entity]
                     # Decelerate once current speed's own stopping distance
                     # (v^2 / 2a) would carry past the waypoint, so arrival
