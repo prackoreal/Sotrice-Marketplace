@@ -1,4 +1,4 @@
 {
-  "version": "0.1.30",
-  "notes": "Voice editing now uses your real microphone and asks for permission first (you can revoke it in Settings > Privacy). A new glass look across the app and the spins. Math: AI answer keys, grading fixes, and teachers can review the AI's grading. No more lag when a spin sends lots of data, and spins can't start twice. Fixes for cut-off spin names in the Toolbox and Marketplace, the graphing layout and the Settings layout."
+  "version": "0.1.31",
+  "notes": "A real city: pick a place and get real OpenStreetMap streets, buildings, terrain, tunnels and subway lines, with cars, pedestrians, trams and trains moving on the real network, in a new 3D view (plus 2D map and Grid). Back button in every full view, working area picker, AI key panel in the city settings (your key is now remembered). Efficiency / Performance / Adaptive modes, and the city runs about twice as fast. Water-like ripples, stronger glass look, and many fixes."
 }
