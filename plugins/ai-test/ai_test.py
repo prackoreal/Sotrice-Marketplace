@@ -95,99 +95,52 @@ anything other than "auto" — "cost" always picks BUDGET regardless of
 hint, "quality" always picks CAPABLE, "auto" (the default) defers to
 each request's own hint.
 
+MULTI-PROVIDER (P14): the provider adapters live in ai_providers.py
+(Gemini, OpenAI, Anthropic Claude, local Ollama/OpenAI-compatible). The
+user picks the provider in Settings (`ai_provider`); callers still just
+send `ai_request` and read `ai_response` -- same shapes as above, plus
+`ai_response.provider` and `ai_response.cost_usd` (an estimate, or None).
+A request the chosen provider can't serve (e.g. audio on Claude) gets a
+clear `error` naming a provider that can, never a silent drop. Control
+attributes on the settings entity (owner-only): `ai_provider`,
+`ai_set_key` {provider, key}, `ai_models` {provider: {budget, capable}},
+`ai_base_url` {provider: url}, `ai_provider_test` {provider} -> result in
+`ai_provider_test_result`, `ai_usage_reset`; published state:
+`ai_providers` (capabilities/models table), `ai_provider_status`
+{provider: configured}, `ai_usage` (per provider/model tokens + cost
+estimate, persisted). Keys: one file per provider under SOTRICE_AI_DIR,
+never logged. Where the text above says "Gemini", read "the chosen provider".
+
 Registered in plugins/registry.json as "ai-test".
 """
 
 import json
 import os
-import re
 import threading
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import Any, Optional
 
+import ai_providers as ap
 from sotrice_client import World
 
-# Current-generation Gemini line only — the 2.5 series (Pro/Flash/
-# Flash-Lite) retires 2026-10-16. Two tiers, verified against
-# ai.google.dev's own models/pricing docs at build time (2026-10-06) —
-# revisit if Google's lineup/pricing shifts before this gets hardened
-# further; don't trust these names as gospel past that date.
-#
-# GEMINI_MODEL_BUDGET: gemini-3.1-flash-lite is the single cheapest
-# current text model ($0.25/$1.50 per 1M input/output tokens) — still
-# "frontier-class" per Google's own framing, not a toy, just the
-# cheapest real option, right for a short classification/extraction task
-# that doesn't need deep reasoning.
-#
-# GEMINI_MODEL_CAPABLE: gemini-3.6-flash/3.7-flash/3.8-flash all share
-# the exact same price ($0.75/$3.75 through 2026-12-31) — gemini-3.8-flash
-# is the most capable of that same-priced trio, so picking it over the
-# other two costs nothing extra. This is why an unlabeled/default caller
-# safely defaults to "complex" (see the module docstring): the "quality"
-# tier isn't meaningfully more expensive than its own same-priced
-# siblings, only genuinely pricier than the BUDGET tier.
-GEMINI_MODEL_BUDGET = "gemini-3.1-flash-lite"
-GEMINI_MODEL_CAPABLE = "gemini-3.8-flash"
-GEMINI_ENDPOINT_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-GEMINI_TIMEOUT_S = 30.0
-
+GEMINI_MODEL_BUDGET = ap.PROVIDERS["gemini"]["models"]["budget"]
+GEMINI_MODEL_CAPABLE = ap.PROVIDERS["gemini"]["models"]["capable"]
 VALID_COST_BIASES = ("auto", "cost", "quality")
 
-
-def _resolve_model(task_hint: Any, cost_bias: str) -> str:
-    """Picks which model answers one request — see the module docstring's
-    "Automatic model selection" section for the actual policy this
-    implements. Never raises: an unrecognized/missing task_hint is
-    treated the same as the documented "complex" default, same posture
-    as every other "don't know? pick the safe default" choice in this
-    file."""
-    if cost_bias == "cost":
-        return GEMINI_MODEL_BUDGET
-    if cost_bias == "quality":
-        return GEMINI_MODEL_CAPABLE
-    return GEMINI_MODEL_BUDGET if task_hint == "simple" else GEMINI_MODEL_CAPABLE
-
-# Real, observed behavior (2026-09-27 live verification): Gemini genuinely
-# returns transient 5xx under ordinary back-to-back load, not just under
-# some contrived failure test — a single attempt surfaces that straight
-# to the teacher as an error for what a moment later succeeds fine. Only
-# retries a response actually worth retrying: a 429/5xx status, or a
-# network-level failure (timeout, connection reset) that says nothing
-# about whether the REQUEST itself was bad. An ordinary 4xx (bad key, bad
-# request) fails on attempt 2 exactly the same way it failed on attempt
-# 1, so retrying it would only add latency before showing the same error.
-GEMINI_MAX_ATTEMPTS = 3
-GEMINI_RETRY_BASE_DELAY_S = 1.0
-_TRANSIENT_HTTP_STATUSES = {429, 500, 502, 503, 504}
-
-
-def _is_transient(exc: Exception) -> bool:
-    if isinstance(exc, urllib.error.HTTPError):
-        return exc.code in _TRANSIENT_HTTP_STATUSES
-    if isinstance(exc, urllib.error.URLError):
-        # Anything else that never got a real HTTP status back at all —
-        # a timeout, connection reset, DNS hiccup — is exactly as
-        # possibly-transient as a 5xx, not a statement about the request.
-        return True
-    return False
-
-# clients/python/ai_test.py -> parents[1] is "clients", parents[2] is the
-# repo root local-secrets/ actually lives in.
+# clients/python/ai_test.py -> parents[2] is the repo root local-secrets/ lives in.
 _LOCAL_SECRETS_KEY_PATH = Path(__file__).resolve().parents[2] / "local-secrets" / "gemini_api_key.txt"
 
 
-def load_api_key() -> Optional[str]:
-    """Dev-only convention, see module docstring. Returns None (never
-    raises) if the file doesn't exist yet — that's a normal, expected
-    state before a key has been dropped in, not an error.
+def _resolve_model(task_hint: Any, cost_bias: str) -> str:
+    """Gemini default-model policy (kept for existing callers/tests); the
+    multi-provider version is ap.resolve_model."""
+    return ap.resolve_model("gemini", task_hint, cost_bias)
 
-    Accepts either a bare key on its own (matching cesium_ion_token.txt's
-    plain-value convention) or a `GEMINI_API_KEY=...` line among others
-    (e.g. a Cloud project id noted alongside it) — reads whichever shape
-    is actually there rather than assuming one over the other."""
+
+def load_api_key() -> Optional[str]:
+    """Dev-only local-secrets Gemini key (bare key or GEMINI_API_KEY=...
+    line). None, never raises, when absent."""
     try:
         text = _LOCAL_SECRETS_KEY_PATH.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -196,354 +149,246 @@ def load_api_key() -> Optional[str]:
         line = line.strip()
         if line.startswith("GEMINI_API_KEY="):
             return line[len("GEMINI_API_KEY=") :].strip() or None
-    stripped = text.strip()
-    return stripped or None
+    return text.strip() or None
+
+
+def _ai_dir() -> Path:
+    """Per-user store, outside any plugin install dir. SOTRICE_AI_DIR overrides (tests)."""
+    override = os.environ.get("SOTRICE_AI_DIR")
+    return Path(override) if override else Path(os.environ.get("APPDATA") or Path.home()) / "Sotrice" / "ai"
+
+
+def _key_path(provider: str = "gemini") -> Path:
+    # gemini keeps its original filename so existing installs keep their key
+    return _ai_dir() / ("gemini_api_key.txt" if provider == "gemini" else f"{provider}_api_key.txt")
 
 
 def _saved_key_path() -> Path:
-    """Where a key entered in a Settings UI is persisted, so it survives an
-    app restart (Core itself is in-memory: without this the user had to
-    re-enter the key on every launch). Per-user, outside any plugin install
-    dir (a plugin update replaces that). SOTRICE_AI_DIR overrides it (tests)."""
-    override = os.environ.get("SOTRICE_AI_DIR")
-    base = Path(override) if override else Path(os.environ.get("APPDATA") or Path.home()) / "Sotrice" / "ai"
-    return base / "gemini_api_key.txt"
+    return _key_path("gemini")
 
 
-def load_saved_key() -> Optional[str]:
+def load_saved_key(provider: str = "gemini") -> Optional[str]:
     try:
-        return _saved_key_path().read_text(encoding="utf-8").strip() or None
+        return _key_path(provider).read_text(encoding="utf-8").strip() or None
     except OSError:
         return None
 
 
-def save_key(key: str) -> bool:
+def save_key(key: str, provider: str = "gemini") -> bool:
     try:
-        path = _saved_key_path()
+        path = _key_path(provider)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(key, encoding="utf-8")
         return True
     except OSError as exc:
-        print(f"[ai-test] could not persist the API key ({exc}) -- it will work until this process exits")
+        print(f"[ai-test] could not persist the {provider} API key ({exc}) -- it will work until this process exits")
         return False
 
 
-# Gemini's inline-data request ceiling is 20 MB TOTAL (prompt + every
-# attachment, base64-inflated by ~33%) — anything bigger has to go
-# through its separate Files API, which this stdlib-only skeleton
-# deliberately doesn't implement. Capping decoded bytes well under that
-# turns "Gemini rejected a 25 MB request after a slow upload" into an
-# immediate, specific error the calling spin can show.
-MAX_ATTACHMENTS = 8
-MAX_ATTACHMENT_TOTAL_BYTES = 12 * 1024 * 1024
-
-# Only media types Gemini actually ingests as inline data and a spin has a
-# real reason to send. An allow-list (not "anything with a slash") so a
-# spin can't use this relay to push arbitrary blobs at the API, and a typo'd
-# type fails here with a clear message instead of as an opaque Gemini 400.
-ALLOWED_ATTACHMENT_MIME_TYPES = frozenset(
-    {
-        "audio/wav",
-        "audio/mpeg",
-        "audio/ogg",
-        "image/png",
-        "image/jpeg",
-        "image/webp",
-        "application/pdf",
-    }
-)
-# Standard base64 alphabet, optional trailing padding, nothing else (no
-# whitespace/newlines, no URL-safe alphabet) -- exactly what Gemini's
-# inlineData.data expects.
-_BASE64_RE = re.compile(r"[A-Za-z0-9+/]*={0,2}")
+def _load_json(name: str, default):
+    try:
+        return json.loads((_ai_dir() / name).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return default
 
 
+def _save_json(name: str, value) -> None:
+    try:
+        path = _ai_dir() / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(value), encoding="utf-8")
+    except OSError as exc:
+        print(f"[ai-test] could not persist {name} ({exc})")
+
+
+# Gemini-shaped wrappers (existing tests/callers); the neutral validators
+# live in ai_providers.
 def normalize_attachments(raw: Any) -> list[dict]:
-    """Validates a request's optional `attachments` field and returns the
-    Gemini `inlineData` parts to send (each `{"inlineData": {"mimeType",
-    "data"}}`). Raises ValueError with a human-readable message — never
-    echoing any of the data itself — on a malformed attachment, so the
-    caller turns it into an ordinary `ai_response.error` instead of
-    forwarding garbage to Gemini (and paying for the round trip).
-
-    Does NOT decode the base64: Gemini wants it base64 anyway. It is
-    validated by shape (alphabet + length multiple of 4 + padding only at
-    the end) and the size check below uses the base64 length (decoded size
-    is len*3/4 minus padding), so a multi-megabyte attachment is never
-    allocated twice just to be checked."""
-    if raw is None:
-        return []
-    if not isinstance(raw, list):
-        raise ValueError("attachments must be a list")
-    if len(raw) > MAX_ATTACHMENTS:
-        raise ValueError(f"too many attachments ({len(raw)}, max {MAX_ATTACHMENTS})")
-    parts: list[dict] = []
-    total = 0
-    for index, item in enumerate(raw):
-        if not isinstance(item, dict):
-            raise ValueError(f"attachment {index} must be an object")
-        mime_type = item.get("mime_type")
-        data = item.get("data_base64")
-        if not isinstance(mime_type, str) or mime_type not in ALLOWED_ATTACHMENT_MIME_TYPES:
-            raise ValueError(
-                f"attachment {index} has an unsupported mime_type (allowed: {', '.join(sorted(ALLOWED_ATTACHMENT_MIME_TYPES))})"
-            )
-        if not isinstance(data, str) or not data:
-            raise ValueError(f"attachment {index} needs non-empty data_base64")
-        if len(data) % 4 != 0 or not _BASE64_RE.fullmatch(data):
-            raise ValueError(f"attachment {index} data_base64 isn't valid base64")
-        total += len(data) * 3 // 4
-        if total > MAX_ATTACHMENT_TOTAL_BYTES:
-            raise ValueError(f"attachments too large (over {MAX_ATTACHMENT_TOTAL_BYTES // (1024 * 1024)} MB total)")
-        parts.append({"inlineData": {"mimeType": mime_type, "data": data}})
-    return parts
-
-
-MAX_TOOLS = 24
-MAX_HISTORY_TURNS = 24
+    return [{"inlineData": {"mimeType": a["mime_type"], "data": a["data_base64"]}} for a in ap.validate_attachments(raw)]
 
 
 def normalize_tools(raw: Any) -> Optional[list[dict]]:
-    """Validates a request's optional `tools` field — `[{name, description,
-    parameters_schema}]` — and returns Gemini's `tools` value (one
-    `functionDeclarations` group), or None when absent/empty. Raises
-    ValueError on garbage so it becomes an ordinary `ai_response.error`.
-    `parameters_schema` is plain JSON-schema (type/properties/required);
-    it is forwarded as Gemini's `parameters` untouched."""
-    if raw is None or raw == []:
-        return None
-    if not isinstance(raw, list):
-        raise ValueError("tools must be a list")
-    if len(raw) > MAX_TOOLS:
-        raise ValueError(f"too many tools ({len(raw)}, max {MAX_TOOLS})")
-    declarations = []
-    for index, tool in enumerate(raw):
-        if not isinstance(tool, dict) or not isinstance(tool.get("name"), str) or not tool["name"]:
-            raise ValueError(f"tool {index} needs a name")
-        declaration: dict = {"name": tool["name"], "description": str(tool.get("description") or "")}
-        schema = tool.get("parameters_schema")
-        if isinstance(schema, dict) and schema.get("properties"):
-            declaration["parameters"] = schema
-        declarations.append(declaration)
-    return [{"functionDeclarations": declarations}]
+    return ap.gemini_tools(ap.validate_tools(raw))
 
 
 def normalize_history(raw: Any) -> list[dict]:
-    """Converts a request's optional `history` into Gemini `contents`
-    turns. It is the conversation AFTER the first (prompt+context) user
-    turn, owned by the caller (this process stays stateless). Turn shapes:
-        {"role": "user"|"model", "text": "..."}
-        {"role": "model", "tool_call": {"name", "args", "id"?, "signature"?}}
-        {"role": "tool", "name": "...", "result": <any JSON>}
-    `signature` is the opaque `thoughtSignature` Gemini 3 attached to its
-    function call — the caller must echo it back untouched or Gemini
-    rejects the follow-up with a 400 (verified live, 2026-10-14)."""
-    if raw is None:
-        return []
-    if not isinstance(raw, list):
-        raise ValueError("history must be a list")
-    if len(raw) > MAX_HISTORY_TURNS:
-        raise ValueError(f"history too long ({len(raw)}, max {MAX_HISTORY_TURNS})")
-    contents: list[dict] = []
-    for index, turn in enumerate(raw):
-        if not isinstance(turn, dict):
-            raise ValueError(f"history turn {index} must be an object")
-        role = turn.get("role")
-        if role in ("user", "model") and isinstance(turn.get("text"), str):
-            contents.append({"role": role, "parts": [{"text": turn["text"]}]})
-        elif role == "model" and isinstance(turn.get("tool_call"), dict):
-            call = turn["tool_call"]
-            function_call: dict = {"name": call.get("name"), "args": call.get("args") or {}}
-            if call.get("id"):
-                function_call["id"] = call["id"]
-            part: dict = {"functionCall": function_call}
-            if call.get("signature"):
-                part["thoughtSignature"] = call["signature"]
-            contents.append({"role": "model", "parts": [part]})
-        elif role == "tool" and isinstance(turn.get("name"), str):
-            response = {"functionResponse": {"name": turn["name"], "response": {"result": turn.get("result")}}}
-            # Consecutive tool results belong in ONE user turn (parallel calls).
-            if contents and contents[-1]["role"] == "user" and all("functionResponse" in p for p in contents[-1]["parts"]):
-                contents[-1]["parts"].append(response)
-            else:
-                contents.append({"role": "user", "parts": [response]})
-        else:
-            raise ValueError(f"history turn {index} has an unrecognized shape")
-    return contents
-
-
-def call_gemini(api_key: str, model: str, prompt: str, context: Optional[dict], attachments: Optional[list[dict]] = None) -> str:
-    """Plain-text convenience wrapper over `generate` — the original
-    signature, kept for any caller that only wants text."""
-    result = generate(api_key, model, prompt, context, attachments)
-    if not result["text"]:
-        raise RuntimeError("Gemini returned no text")
-    return result["text"]
-
-
-def generate(
-    api_key: str,
-    model: str,
-    prompt: str,
-    context: Optional[dict],
-    attachments: Optional[list[dict]] = None,
-    tools: Optional[list[dict]] = None,
-    history: Optional[list[dict]] = None,
-    system: Optional[str] = None,
-) -> dict:
-    """Makes one real, synchronous call to the Gemini API. Returns
-    `{"text": str|None, "tool_call": {name,args,id,signature}|None,
-    "usage": {prompt,output,total}}`. Raises on any failure (bad key,
-    network error, empty response) — the caller decides how to turn that
-    into an `ai_response.error` string.
-
-    `attachments`/`tools`/`history` are the already-validated outputs of
-    the `normalize_*` helpers. When Gemini elects to call a tool the
-    result carries `tool_call`; any text emitted alongside stays in `text`.
-
-    Deliberately stdlib-only (`urllib.request`, not `requests` or the
-    `google-genai` SDK) — every other plugin in this codebase runs under
-    a plain system `python` with no project-local venv/requirements.txt,
-    so a new pip dependency here would be the first of its kind and
-    silently break on any machine that hasn't manually installed it.
-    """
-    full_prompt = prompt
-    if context:
-        # The calling spin already decided what belongs in `context` —
-        # this just makes sure Gemini actually sees it, not just the
-        # bare prompt. Plain JSON, not prose, so structure survives.
-        # Compact separators: every token counts (Gemini bills for real).
-        full_prompt = f"{prompt}\n\nContext:\n{json.dumps(context, separators=(',', ':'))}"
-
-    # Media parts come BEFORE the text instruction — Gemini's own
-    # guidance for multimodal prompts, and it keeps "what to do with the
-    # attached audio/image" as the last thing the model reads.
-    parts = list(attachments or []) + [{"text": full_prompt}]
-    contents = [{"role": "user", "parts": parts}] if history else [{"parts": parts}]
-    contents.extend(history or [])
-    request_body: dict = {"contents": contents}
-    if tools:
-        request_body["tools"] = tools
-    if system:
-        request_body["systemInstruction"] = {"parts": [{"text": system}]}
-    body = json.dumps(request_body).encode("utf-8")
-    endpoint = GEMINI_ENDPOINT_TEMPLATE.format(model=model)
-    request = urllib.request.Request(
-        f"{endpoint}?key={api_key}",
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    payload = None
-    for attempt in range(1, GEMINI_MAX_ATTEMPTS + 1):
-        try:
-            with urllib.request.urlopen(request, timeout=GEMINI_TIMEOUT_S) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-            break
-        except (urllib.error.HTTPError, urllib.error.URLError) as exc:
-            if attempt == GEMINI_MAX_ATTEMPTS or not _is_transient(exc):
-                raise
-            delay = GEMINI_RETRY_BASE_DELAY_S * (2 ** (attempt - 1))
-            print(f"ai_test: Gemini call attempt {attempt}/{GEMINI_MAX_ATTEMPTS} hit {exc!r} — retrying in {delay:.0f}s")
-            time.sleep(delay)
-
-    candidates = payload.get("candidates") or []
-    if not candidates:
-        raise RuntimeError(f"Gemini returned no candidates: {payload}")
-    response_parts = candidates[0].get("content", {}).get("parts") or []
-    text = "".join(part.get("text", "") for part in response_parts) or None
-    tool_call = None
-    for part in response_parts:
-        function_call = part.get("functionCall")
-        if function_call:
-            tool_call = {
-                "name": function_call.get("name"),
-                "args": function_call.get("args") or {},
-                "id": function_call.get("id"),
-                "signature": part.get("thoughtSignature"),
-            }
-            break
-    if not text and not tool_call:
-        raise RuntimeError(f"Gemini returned an empty response: {payload}")
-    usage_raw = payload.get("usageMetadata") or {}
-    usage = {
-        "prompt": usage_raw.get("promptTokenCount", 0),
-        "output": usage_raw.get("candidatesTokenCount", 0),
-        "total": usage_raw.get("totalTokenCount", 0),
-    }
-    return {"text": text, "tool_call": tool_call, "usage": usage}
+    return ap.gemini_history(ap.validate_history(raw))
 
 
 class Settings:
-    """This process's own live, mutable view of `ai_api_key`/
-    `ai_cost_bias` — see the module docstring's "Settings" section.
-    Starts from local-secrets as a fallback default, then tracks
-    whatever the real Settings UI (or any other local writer) pushes,
-    for as long as this process runs; a setting changed mid-run applies
-    to the very next request, no restart needed."""
+    """This process's live view of the user's AI settings. A change applies
+    to the very next request, no restart. Thread-safe."""
 
-    def __init__(self, fallback_api_key: Optional[str]):
+    def __init__(self):
         self.lock = threading.Lock()
-        self.api_key = fallback_api_key
-        self.cost_bias = "auto"
-        self.on_configured = None  # set by main(): publishes ai_api_key_configured
+        saved = _load_json("settings.json", {})
+        self.provider = saved.get("provider") if saved.get("provider") in ap.PROVIDERS else ap.DEFAULT_PROVIDER
+        self.cost_bias = saved.get("cost_bias") if saved.get("cost_bias") in VALID_COST_BIASES else "auto"
+        self.models: dict = saved.get("models") or {}
+        self.base_urls: dict = saved.get("base_urls") or {}
+        self.prices: dict = saved.get("prices") or {}
+        self.keys: dict = {p: load_saved_key(p) for p in ap.PROVIDERS if ap.PROVIDERS[p]["needs_key"]}
+        if not self.keys.get("gemini"):
+            self.keys["gemini"] = load_api_key()  # dev fallback only
+        self.usage: dict = _load_json("usage.json", {})
+        self.on_change = None  # set by main(): republishes state
+        self.scrub = None  # set by main(): overwrites a consumed secret attribute in Core
+
+    def _persist(self):
+        _save_json(
+            "settings.json",
+            {"provider": self.provider, "cost_bias": self.cost_bias, "models": self.models, "base_urls": self.base_urls, "prices": self.prices},
+        )
+        if self.on_change:
+            self.on_change()
+
+    def set_key(self, provider: str, key: str):
+        key = key.strip()
+        if provider not in ap.PROVIDERS or not ap.PROVIDERS[provider]["needs_key"] or not key:
+            return
+        with self.lock:
+            self.keys[provider] = key
+        if key != load_saved_key(provider):
+            save_key(key, provider)
+        if self.on_change:
+            self.on_change()
 
     def on_api_key(self, entity: int, attribute: str, value: Any, source: Optional[str]):
-        if isinstance(value, str) and value.strip():
-            with self.lock:
-                self.api_key = value.strip()
-            if value.strip() != load_saved_key():
-                save_key(value.strip())
-            if self.on_configured:
-                self.on_configured(True)
+        if isinstance(value, str):  # legacy attribute: Gemini key
+            self.set_key("gemini", value)
+            if value.strip() and self.scrub:
+                self.scrub(entity, attribute)
 
-    def on_cost_bias(self, entity: int, attribute: str, value: Any, source: Optional[str]):
+    def on_set_key(self, entity, attribute, value, source):
+        if isinstance(value, dict) and isinstance(value.get("provider"), str) and isinstance(value.get("key"), str):
+            self.set_key(value["provider"], value["key"])
+            if self.scrub:
+                self.scrub(entity, attribute)
+
+    def on_cost_bias(self, entity, attribute, value, source):
         if value in VALID_COST_BIASES:
             with self.lock:
+                changed = value != self.cost_bias
                 self.cost_bias = value
+            if changed:
+                self._persist()
 
-    def snapshot(self) -> tuple[Optional[str], str]:
+    def on_provider(self, entity, attribute, value, source):
+        if value in ap.PROVIDERS:
+            with self.lock:
+                changed = value != self.provider
+                self.provider = value
+            if changed:
+                self._persist()
+
+    def on_models(self, entity, attribute, value, source):
+        if isinstance(value, dict):
+            clean = {
+                p: {t: m.strip() for t, m in tiers.items() if t in ap.TIERS and isinstance(m, str) and m.strip()}
+                for p, tiers in value.items()
+                if p in ap.PROVIDERS and isinstance(tiers, dict)
+            }
+            with self.lock:
+                changed = clean != self.models
+                self.models = clean
+            if changed:
+                self._persist()
+
+    def on_base_urls(self, entity, attribute, value, source):
+        if isinstance(value, dict):
+            clean = {p: u.strip() for p, u in value.items() if p in ap.PROVIDERS and isinstance(u, str) and u.strip().startswith(("http://", "https://"))}
+            with self.lock:
+                changed = clean != self.base_urls
+                self.base_urls = clean
+            if changed:
+                self._persist()
+
+    def snapshot(self) -> dict:
         with self.lock:
-            return self.api_key, self.cost_bias
+            p = self.provider
+            return {
+                "provider": p,
+                "api_key": self.keys.get(p),
+                "cost_bias": self.cost_bias,
+                "models": dict(self.models.get(p) or {}),
+                "base_url": self.base_urls.get(p),
+                "prices": dict(self.prices),
+            }
+
+    def configured(self) -> dict:
+        with self.lock:
+            return {p: (bool(self.keys.get(p)) if ap.PROVIDERS[p]["needs_key"] else True) for p in ap.PROVIDERS}
+
+    def record_usage(self, provider: str, model: str, usage: dict, cost: Optional[float]):
+        with self.lock:
+            row = self.usage.setdefault(provider, {}).setdefault(model, {"requests": 0, "prompt": 0, "output": 0, "cost_usd": 0.0})
+            row["requests"] += 1
+            row["prompt"] += usage.get("prompt", 0)
+            row["output"] += usage.get("output", 0)
+            row["cost_usd"] = round(row["cost_usd"] + (cost or 0.0), 6)
+            snapshot = json.loads(json.dumps(self.usage))
+        _save_json("usage.json", snapshot)
+        if self.on_change:
+            self.on_change()
+
+    def reset_usage(self, *_):
+        with self.lock:
+            self.usage = {}
+        _save_json("usage.json", {})
+        if self.on_change:
+            self.on_change()
 
 
 def main():
     with World() as world:
         name = world.identify("ai-test")
-        fallback_key = load_saved_key() or load_api_key()
-        settings = Settings(fallback_key)
+        settings = Settings()
 
-        # A real control Entity — see the module docstring's "Settings"
-        # section for why this travels over Core attributes rather than
-        # a Tauri-only path. `ai_settings_ready` is the bare, replay-able
-        # marker ai-test-ui discovers this entity by (same "subscribe to
-        # a known bare name with replay=True" idiom every other plugin's
-        # own UI discovery already uses) — its value (whether a key is
-        # currently configured, from WHICHEVER source) is itself useful
-        # display info, never the secret value itself.
         control = world.create_entity()
-        world.set_many([
-            (control, "ai_settings_ready", True),
-            (control, "ai_api_key_configured", bool(fallback_key)),
-            (control, "ai_cost_bias", settings.cost_bias),
-        ])
-        if fallback_key:
-            print(f"[{name}] Gemini API key loaded from local-secrets (fallback default) — ready for real requests")
-        else:
-            print(
-                f"[{name}] no API key yet (neither ai_api_key nor {_LOCAL_SECRETS_KEY_PATH}) — "
-                "ai_request pushes will get a real error response, not silently hang"
-            )
 
-        settings.on_configured = lambda ok: world.set_attribute(control, "ai_api_key_configured", ok)
+        def publish_state():
+            with settings.lock:
+                usage = json.loads(json.dumps(settings.usage))
+                provider, bias = settings.provider, settings.cost_bias
+                models, base_urls = dict(settings.models), dict(settings.base_urls)
+            configured = settings.configured()
+            world.set_many([
+                (control, "ai_provider", provider),
+                (control, "ai_provider_status", configured),
+                (control, "ai_api_key_configured", configured.get(provider, False)),
+                (control, "ai_cost_bias", bias),
+                (control, "ai_models", models),
+                (control, "ai_base_url", base_urls),
+                (control, "ai_usage", usage),
+            ])
+
+        settings.on_change = publish_state
+        # A key written through Core would otherwise sit in the attribute
+        # store (readable by anything allowed to read it) long after it was
+        # saved to disk; overwrite it as soon as it has been consumed.
+        settings.scrub = lambda entity, attribute: world.set_attribute(entity, attribute, "")
+        world.set_many([(control, "ai_settings_ready", True), (control, "ai_providers", ap.describe_providers())])
+        publish_state()
+        snap = settings.snapshot()
+        ready = bool(snap["api_key"]) or not ap.PROVIDERS[snap["provider"]]["needs_key"]
+        print(f"[{name}] provider {snap['provider']} ({'ready' if ready else 'NO KEY yet'}) — watching for ai_request")
+
         world.subscribe("ai_api_key", settings.on_api_key, replay=True)
+        world.subscribe("ai_set_key", settings.on_set_key, replay=False)
         world.subscribe("ai_cost_bias", settings.on_cost_bias, replay=True)
+        world.subscribe("ai_provider", settings.on_provider, replay=True)
+        world.subscribe("ai_models", settings.on_models, replay=True)
+        world.subscribe("ai_base_url", settings.on_base_urls, replay=True)
+        world.subscribe("ai_usage_reset", settings.reset_usage, replay=False)
 
-        # Guards against re-answering the exact same request twice (e.g.
-        # a replay on process restart re-delivering a request this
-        # process, or an earlier instance, already answered) — cheap
-        # insurance against double-billing the same prompt to Gemini.
+        def handle_test(entity, attribute, value, source):
+            if isinstance(value, dict) and value.get("provider") in ap.PROVIDERS:
+                threading.Thread(target=_test_provider, args=(world, entity, settings, value["provider"]), daemon=True).start()
+
+        world.subscribe("ai_provider_test", handle_test, replay=False)
+
+        # Guards against re-answering the same request twice (replay on
+        # restart) -- cheap insurance against double billing.
         answered_lock = threading.Lock()
         answered: set[tuple[int, Optional[str]]] = set()
 
@@ -556,31 +401,16 @@ def main():
                 print(f"[{name}] ignoring ai_request on entity {entity} with no prompt")
                 return
             request_id = value.get("request_id")
-            context = value.get("context")
-            task_hint = value.get("task_hint")
             system = value.get("system") if isinstance(value.get("system"), str) else None
             try:
-                attachments = normalize_attachments(value.get("attachments"))
-                tools = normalize_tools(value.get("tools"))
-                history = normalize_history(value.get("history"))
+                attachments = ap.validate_attachments(value.get("attachments"))
+                tools = ap.validate_tools(value.get("tools"))
+                history = ap.validate_history(value.get("history"))
             except ValueError as exc:
-                # A malformed attachment gets a real, immediate error
-                # response (not a silent drop, which would leave the
-                # caller waiting out its own timeout) — and no dedup
-                # entry, since nothing was billed or answered.
                 print(f"[{name}] rejecting ai_request on entity {entity}: {exc}")
-                world.set_attribute(
-                    entity,
-                    "ai_response",
-                    {"request_id": request_id, "text": None, "model": None, "error": f"bad request: {exc}"},
-                )
+                world.set_attribute(entity, "ai_response", {"request_id": request_id, "text": None, "model": None, "error": f"bad request: {exc}"})
                 return
 
-            # Dedup only requests that carry an id: with request_id=None
-            # every request from an entity shares one key, so the SECOND
-            # id-less request from that entity would be silently dropped
-            # forever. An id-less request can't be told apart from a
-            # genuine repeat, so it is always answered.
             if request_id is not None:
                 dedup_key = (entity, request_id)
                 with answered_lock:
@@ -588,23 +418,52 @@ def main():
                         return
                     answered.add(dedup_key)
 
-            # One worker thread per request — see module docstring for
-            # why this must NOT run inline on sotrice_client's shared
-            # dispatch thread.
+            # One worker thread per request: never block sotrice_client's
+            # single dispatch thread on a slow network call.
             threading.Thread(
                 target=_answer_request,
-                args=(world, name, settings, entity, request_id, prompt, context, task_hint, attachments, tools, history, system),
+                args=(world, name, settings, entity, request_id, prompt, value.get("context"), value.get("task_hint"), attachments, tools, history, system),
                 daemon=True,
             ).start()
 
         world.subscribe("ai_request", handle_request, replay=True)
 
-        print(f"[{name}] watching for ai_request — Ctrl+C to stop")
         try:
             while True:
                 time.sleep(1.0)
         except KeyboardInterrupt:
             print(f"[{name}] stopped")
+
+
+def _test_provider(world: World, entity: int, settings: "Settings", provider: str):
+    """'Save & test': a free key/connection check via the model list, then
+    ONE tiny budget-model call. Result goes to ai_provider_test_result."""
+    spec = ap.PROVIDERS[provider]
+    with settings.lock:
+        key = settings.keys.get(provider)
+        base_url = settings.base_urls.get(provider)
+        overrides = dict(settings.models.get(provider) or {})
+        prices = dict(settings.prices)
+    result: dict = {"provider": provider, "ok": False, "error": None, "models": [], "reply": None, "latency_ms": None}
+    started = time.perf_counter()
+    try:
+        if spec["needs_key"] and not key:
+            raise ValueError(f"No {spec['label']} API key saved yet.")
+        try:
+            result["models"] = ap.list_models(provider, key, base_url)
+        except RuntimeError:
+            # Hosted providers: a failed list IS the key check. A local
+            # server without /models is fine.
+            if spec["needs_key"]:
+                raise
+        model = ap.resolve_model(provider, "simple", "cost", overrides)
+        reply = ap.generate(provider, key, model, "Reply with exactly one word: pong", base_url=base_url, max_tokens=64)
+        result.update(ok=True, reply=(reply["text"] or "")[:80], model=model)
+        settings.record_usage(provider, model, reply["usage"], ap.estimate_cost_usd(model, reply["usage"], prices))
+    except (ValueError, RuntimeError) as exc:
+        result["error"] = str(exc)
+    result["latency_ms"] = int((time.perf_counter() - started) * 1000)
+    world.set_attribute(entity, "ai_provider_test_result", {**result, "nonce": time.time()})
 
 
 def _answer_request(
@@ -622,34 +481,34 @@ def _answer_request(
     system: Optional[str] = None,
 ):
     started = time.perf_counter()
-    api_key, cost_bias = settings.snapshot()
-    model = _resolve_model(task_hint, cost_bias)
-    if not api_key:
-        world.set_attribute(
-            entity,
-            "ai_response",
-            {"request_id": request_id, "text": None, "model": model, "error": "No Gemini API key set yet. In the city view open Settings > AI (Gemini key) and paste your key (free at ai.google.dev)."},
-        )
-        return
+    snap = settings.snapshot()
+    provider = snap["provider"]
+    model = ap.resolve_model(provider, task_hint, snap["cost_bias"], snap["models"])
 
     try:
-        result = generate(api_key, model, prompt, context, attachments, tools, history, system)
-    except (urllib.error.URLError, RuntimeError, ValueError) as exc:
-        print(f"[{name}] Gemini call failed for entity {entity}: {exc!r}")
+        result = ap.generate(provider, snap["api_key"], model, prompt, context, attachments, tools, history, system, snap["base_url"])
+    except (ValueError, RuntimeError) as exc:
+        print(f"[{name}] {provider} call failed for entity {entity}: {exc}")
         world.set_attribute(
-            entity,
-            "ai_response",
-            {"request_id": request_id, "text": None, "model": model, "error": str(exc)},
+            entity, "ai_response", {"request_id": request_id, "text": None, "model": model, "provider": provider, "error": str(exc)}
         )
         return
 
-    elapsed = time.perf_counter() - started
-    text = result["text"]
+    cost = ap.estimate_cost_usd(model, result["usage"], snap["prices"])
+    settings.record_usage(provider, model, result["usage"], cost)
     print(
-        f"[{name}] answered entity {entity}'s request in {elapsed:.2f}s "
-        f"({len(text or '')} chars, tool_call={bool(result['tool_call'])}, model {model}, tokens {result['usage']['total']})"
+        f"[{name}] answered entity {entity}'s request in {time.perf_counter() - started:.2f}s "
+        f"({len(result['text'] or '')} chars, tool_call={bool(result['tool_call'])}, {provider}/{model}, tokens {result['usage']['total']})"
     )
-    response = {"request_id": request_id, "text": text, "model": model, "error": None, "usage": result["usage"]}
+    response = {
+        "request_id": request_id,
+        "text": result["text"],
+        "model": model,
+        "provider": provider,
+        "error": None,
+        "usage": result["usage"],
+        "cost_usd": cost,
+    }
     if result["tool_call"]:
         response["tool_call"] = result["tool_call"]
     world.set_attribute(entity, "ai_response", response)

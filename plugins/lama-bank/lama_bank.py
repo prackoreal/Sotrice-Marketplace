@@ -617,6 +617,9 @@ with World() as world:
     # -- stop at once instead of burning a request per remaining batch.
     _FATAL_AI_ERRORS = (
         ("no gemini api key", "no_key"),
+        ("api key set yet", "no_key"),
+        ("http 401", "bad_key"),
+        ("http 403", "bad_key"),
         ("api key not valid", "bad_key"),
         ("api_key_invalid", "bad_key"),
         ("permission_denied", "bad_key"),
@@ -640,12 +643,12 @@ with World() as world:
         if fatal == "no_key":
             return _ai_status(
                 "unavailable",
-                f"{waiting} question{'s' if waiting != 1 else ''} can't get an AI answer key yet: no Gemini API key is set up. "
+                f"{waiting} question{'s' if waiting != 1 else ''} can't get an AI answer key yet: no AI API key is set up. "
                 "Add one in the AI settings, then rescan -- until then they import without an answer key (you can still set it by hand).",
                 stats,
             )
         if fatal == "bad_key":
-            return _ai_status("unavailable", "The Gemini API key was rejected, so AI answer keys are off. Check the key in the AI settings, then rescan.", stats)
+            return _ai_status("unavailable", "The AI API key was rejected, so AI answer keys are off. Check the key in the AI settings, then rescan.", stats)
         if fatal in ("unreachable", "error"):
             return _ai_status(
                 "unavailable",
