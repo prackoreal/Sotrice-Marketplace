@@ -164,7 +164,7 @@ class CoreAiBridge:
         if info is None:
             return {"state": "missing", "version": None, "key_configured": False, "cost_bias": "auto",
                     "message": "Photo scan uses the AI spin, which isn't installed. Install \"ai-test\" from the Marketplace, "
-                               "then add your Gemini API key in it."}
+                               "then set up an AI provider in Settings → AI."}
         version = info.get("version")
         if not L.version_at_least(version, MIN_AI_VERSION):
             return {"state": "old", "version": version, "key_configured": False, "cost_bias": "auto",
@@ -177,8 +177,7 @@ class CoreAiBridge:
         bias = biases[-1] if biases else "auto"
         if launches and known and not any(known):
             return {"state": "no_key", "version": version, "key_configured": False, "cost_bias": bias,
-                    "message": "No Gemini API key is set. Open the AI spin (\"ai-test\") in the Toolbox, paste your key under "
-                               "\"Gemini API key\" and press Save, then scan again."}
+                    "message": "No AI provider key is set. Set up an AI provider in Settings → AI (pick one and paste your key), then scan again."}
         if not launches:
             return {"state": "idle", "version": version, "key_configured": False, "cost_bias": bias,
                     "message": "The AI spin will be started for the scan."}

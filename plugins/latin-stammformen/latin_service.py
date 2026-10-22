@@ -515,13 +515,14 @@ class Service:
     @staticmethod
     def _friendly_ai_error(error: str) -> str:
         low = error.lower()
-        if "no gemini api key" in low:
-            return ("No Gemini API key is set. Open the AI spin (\"ai-test\") in the Toolbox, paste your key under "
-                    "\"Gemini API key\" and press Save, then scan again.")
-        if "api key not valid" in low or "api_key_invalid" in low or "permission_denied" in low:
-            return "Gemini rejected the API key. Open the AI spin (\"ai-test\"), paste a valid key and press Save."
+        if "no gemini api key" in low or "api key set yet" in low:
+            return "No AI provider key is set. Set up an AI provider in Settings → AI (pick one and paste your key), then scan again."
+        if "api key not valid" in low or "api_key_invalid" in low or "permission_denied" in low or "http 401" in low or "http 403" in low:
+            return "The AI provider rejected the API key. Check it in Settings → AI and use Save & test."
         if "429" in low or "quota" in low or "rate" in low and "limit" in low:
-            return "Gemini says the quota/rate limit is used up for now. Wait a minute and try again."
+            return "The AI provider says the quota/rate limit is used up for now. Wait a minute and try again."
+        if "can't take" in low and "input" in low:
+            return error
         if "bad attachments" in low:
             return f"The AI spin refused the file ({error})."
         return f"The AI request failed: {error}"
