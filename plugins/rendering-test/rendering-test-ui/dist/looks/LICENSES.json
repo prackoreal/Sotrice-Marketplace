@@ -1,0 +1,582 @@
+{
+  "version": 1,
+  "generated": "2026-10-23",
+  "source": "ambientCG",
+  "source_url": "https://ambientcg.com",
+  "license": "CC0 1.0 Universal (public domain dedication)",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "license_info_url": "https://docs.ambientcg.com/license/",
+  "license_statement_verified": "docs.ambientcg.com/license (read 2026-10-23): all ambientCG assets are provided under CC0 1.0 Universal; copy, modify, distribute, also commercially, without asking permission; credit is optional.",
+  "attribution": "Contains textures from ambientCG.com, CC0 1.0 (no attribution required, credited anyway)",
+  "retrieved": "2026-10-23",
+  "download_policy": "ambientCG only, official API (full_json) and official download links, at most 1 request per second, User-Agent 'Sotrice-looks/1.0 (educational city simulator)', 1K-JPG packages only.",
+  "download_cap_mb": 140,
+  "downloaded_total_bytes": 128504724,
+  "downloaded_total_mb": 128.5,
+  "shipped_sets_zip_bytes": 114635441,
+  "shipped_sets_zip_mb": 114.64,
+  "rejected_downloads_zip_bytes": 13869283,
+  "rejected_downloads_zip_mb": 13.87,
+  "rejected_downloads": [
+    {
+      "ambientcg_id": "Plaster003",
+      "zip_file": "Plaster003_1K-JPG.zip",
+      "zip_bytes": 7879772,
+      "zip_sha256": "3a47249643273c82c53d8d31c9caef43aec940a4c926cf0c74858a8e96631bf1",
+      "download_url": "https://ambientcg.com/get?file=Plaster003_1K-JPG.zip",
+      "reason": "rejected after inspection: busy swirled patches and scratches (unique features, not 'no strong pattern'); replaced by Plaster002",
+      "status": "downloaded and evaluated, then deleted; nothing derived from it is shipped"
+    },
+    {
+      "ambientcg_id": "Concrete046",
+      "zip_file": "Concrete046_1K-JPG.zip",
+      "zip_bytes": 5989511,
+      "zip_sha256": "72bf4321acbb39ddbc3b786f5996813b2a3cede12efefb47955e97ea9668985b",
+      "download_url": "https://ambientcg.com/get?file=Concrete046_1K-JPG.zip",
+      "reason": "rejected after inspection: large rectangular repair-like patch in the lower middle (unique feature, visible repetition); replaced by Concrete031",
+      "status": "downloaded and evaluated, then deleted; nothing derived from it is shipped"
+    }
+  ],
+  "assets": [
+    {
+      "id": "stucco",
+      "key": "stucco",
+      "variant": 1,
+      "role": "wall",
+      "source": "ambientCG",
+      "ambientcg_id": "Plaster001",
+      "title": "Plaster 001",
+      "license": "CC0 1.0 Universal (public domain dedication)",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_info_url": "https://docs.ambientcg.com/license/",
+      "asset_page": "https://ambientcg.com/view?id=Plaster001",
+      "download_url": "https://ambientcg.com/get?file=Plaster001_1K-JPG.zip",
+      "zip_file": "Plaster001_1K-JPG.zip",
+      "zip_bytes": 7414156,
+      "zip_sha256": "944b4831016e42ace4a89422e4e7190912ca2f7fed6f561354c48ec7bb54d3a4",
+      "retrieved": "2026-10-23",
+      "source_files_used": [
+        "Plaster001_1K-JPG_Color.jpg",
+        "Plaster001_1K-JPG_NormalGL.jpg",
+        "Plaster001_1K-JPG_Roughness.jpg"
+      ],
+      "outputs": [
+        "pbr/stucco/albedo.jpg",
+        "pbr/stucco/nr.jpg"
+      ],
+      "processing": "Derived work (allowed under CC0): resized to 512x512 for the repo and 1024x1024 for local use (not shipped). albedo.jpg: Color map decoded sRGB -> linear, luminance Y = 0.2126R + 0.7152G + 0.0722B divided by its mean, multiplied by a gain of 0.800 (0.8 per brief; raised only where the [0,1] clamp would pull the mean below 0.8) and clamped, so the mean linear value is 0.8 (measured 0.800 after JPEG, 0.0% of pixels at the clamp); re-encoded to sRGB as a 3-channel grey JPEG, quality 84; the 512 px version is a 2x2 area average taken in linear light. nr.jpg: NormalGL (OpenGL, +Y up) averaged 2x2 and renormalised at the output size, packed as R = normal.x, G = normal.y (n*0.5+0.5) with B = Roughness (2x2 average), JPEG quality 90, 4:4:4 chroma. Only the Color, NormalGL and Roughness maps (plus NormalDX for a convention check) were read; the other files in the zip were not used.",
+      "attribution": "Contains textures from ambientCG.com, CC0 1.0 (no attribution required, credited anyway)",
+      "suggested_credit_by_ambientcg": "Created using Plaster 001 from ambientCG.com, licensed under the Creative Commons CC0 1.0 Universal"
+    },
+    {
+      "id": "stucco_2",
+      "key": "stucco",
+      "variant": 2,
+      "role": "wall",
+      "source": "ambientCG",
+      "ambientcg_id": "Plaster002",
+      "title": "Plaster 002",
+      "license": "CC0 1.0 Universal (public domain dedication)",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_info_url": "https://docs.ambientcg.com/license/",
+      "asset_page": "https://ambientcg.com/view?id=Plaster002",
+      "download_url": "https://ambientcg.com/get?file=Plaster002_1K-JPG.zip",
+      "zip_file": "Plaster002_1K-JPG.zip",
+      "zip_bytes": 7519098,
+      "zip_sha256": "99d88bd74b8b764eb376f5bb52b5c4a432ff13b989e72882be517c9b2fa13a03",
+      "retrieved": "2026-10-23",
+      "source_files_used": [
+        "Plaster002_1K-JPG_Color.jpg",
+        "Plaster002_1K-JPG_NormalGL.jpg",
+        "Plaster002_1K-JPG_Roughness.jpg"
+      ],
+      "outputs": [
+        "pbr/stucco_2/albedo.jpg",
+        "pbr/stucco_2/nr.jpg"
+      ],
+      "processing": "Derived work (allowed under CC0): resized to 512x512 for the repo and 1024x1024 for local use (not shipped). albedo.jpg: Color map decoded sRGB -> linear, luminance Y = 0.2126R + 0.7152G + 0.0722B divided by its mean, multiplied by a gain of 0.800 (0.8 per brief; raised only where the [0,1] clamp would pull the mean below 0.8) and clamped, so the mean linear value is 0.8 (measured 0.800 after JPEG, 0.5% of pixels at the clamp); re-encoded to sRGB as a 3-channel grey JPEG, quality 84; the 512 px version is a 2x2 area average taken in linear light. nr.jpg: NormalGL (OpenGL, +Y up) averaged 2x2 and renormalised at the output size, packed as R = normal.x, G = normal.y (n*0.5+0.5) with B = Roughness (2x2 average), JPEG quality 90, 4:4:4 chroma. Only the Color, NormalGL and Roughness maps (plus NormalDX for a convention check) were read; the other files in the zip were not used.",
+      "attribution": "Contains textures from ambientCG.com, CC0 1.0 (no attribution required, credited anyway)",
+      "suggested_credit_by_ambientcg": "Created using Plaster 002 from ambientCG.com, licensed under the Creative Commons CC0 1.0 Universal"
+    },
+    {
+      "id": "brick",
+      "key": "brick",
+      "variant": 1,
+      "role": "wall",
+      "source": "ambientCG",
+      "ambientcg_id": "Bricks085",
+      "title": "Bricks 085",
+      "license": "CC0 1.0 Universal (public domain dedication)",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_info_url": "https://docs.ambientcg.com/license/",
+      "asset_page": "https://ambientcg.com/view?id=Bricks085",
+      "download_url": "https://ambientcg.com/get?file=Bricks085_1K-JPG.zip",
+      "zip_file": "Bricks085_1K-JPG.zip",
+      "zip_bytes": 4835502,
+      "zip_sha256": "93202c41a65e6932e77c7c42519ee5433b90150427ae726042c616c188e570a0",
+      "retrieved": "2026-10-23",
+      "source_files_used": [
+        "Bricks085_1K-JPG_Color.jpg",
+        "Bricks085_1K-JPG_NormalGL.jpg",
+        "Bricks085_1K-JPG_Roughness.jpg"
+      ],
+      "outputs": [
+        "pbr/brick/albedo.jpg",
+        "pbr/brick/nr.jpg"
+      ],
+      "processing": "Derived work (allowed under CC0): resized to 512x512 for the repo and 1024x1024 for local use (not shipped). albedo.jpg: Color map decoded sRGB -> linear, luminance Y = 0.2126R + 0.7152G + 0.0722B divided by its mean, multiplied by a gain of 1.099 (0.8 per brief; raised only where the [0,1] clamp would pull the mean below 0.8, the literal recipe would leave a mean of 0.668) and clamped, so the mean linear value is 0.8 (measured 0.796 after JPEG, 34.5% of pixels at the clamp); re-encoded to sRGB as a 3-channel grey JPEG, quality 84; the 512 px version is a 2x2 area average taken in linear light. nr.jpg: NormalGL (OpenGL, +Y up) averaged 2x2 and renormalised at the output size, packed as R = normal.x, G = normal.y (n*0.5+0.5) with B = Roughness (2x2 average), JPEG quality 90, 4:4:4 chroma. Only the Color, NormalGL and Roughness maps (plus NormalDX for a convention check) were read; the other files in the zip were not used. The source maps are 1024x512 (2:1); the seamless source was repeated 1x2 (x by y) to form a square tile before resizing, so proportions are not distorted.",
+      "attribution": "Contains textures from ambientCG.com, CC0 1.0 (no attribution required, credited anyway)",
+      "suggested_credit_by_ambientcg": "Created using Bricks 085 from ambientCG.com, licensed under the Creative Commons CC0 1.0 Universal"
+    },
+    {
+      "id": "brick_2",
+      "key": "brick",
+      "variant": 2,
+      "role": "wall",
+      "source": "ambientCG",
+      "ambientcg_id": "Bricks051",
+      "title": "Bricks 051",
+      "license": "CC0 1.0 Universal (public domain dedication)",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_info_url": "https://docs.ambientcg.com/license/",
+      "asset_page": "https://ambientcg.com/view?id=Bricks051",
+      "download_url": "https://ambientcg.com/get?file=Bricks051_1K-JPG.zip",
+      "zip_file": "Bricks051_1K-JPG.zip",
+      "zip_bytes": 7497159,
+      "zip_sha256": "c23d3d459e1a73f3d8a0b83606571c6172e485f544ff4605d1cb37eb637bfdfd",
+      "retrieved": "2026-10-23",
+      "source_files_used": [
+        "Bricks051_1K-JPG_Color.jpg",
+        "Bricks051_1K-JPG_NormalGL.jpg",
+        "Bricks051_1K-JPG_Roughness.jpg"
+      ],
+      "outputs": [
+        "pbr/brick_2/albedo.jpg",
+        "pbr/brick_2/nr.jpg"
+      ],
+      "processing": "Derived work (allowed under CC0): resized to 512x512 for the repo and 1024x1024 for local use (not shipped). albedo.jpg: Color map decoded sRGB -> linear, luminance Y = 0.2126R + 0.7152G + 0.0722B divided by its mean, multiplied by a gain of 0.857 (0.8 per brief; raised only where the [0,1] clamp would pull the mean below 0.8, the literal recipe would leave a mean of 0.759) and clamped, so the mean linear value is 0.8 (measured 0.799 after JPEG, 19.2% of pixels at the clamp); re-encoded to sRGB as a 3-channel grey JPEG, quality 84; the 512 px version is a 2x2 area average taken in linear light. nr.jpg: NormalGL (OpenGL, +Y up) averaged 2x2 and renormalised at the output size, packed as R = normal.x, G = normal.y (n*0.5+0.5) with B = Roughness (2x2 average), JPEG quality 90, 4:4:4 chroma. Only the Color, NormalGL and Roughness maps (plus NormalDX for a convention check) were read; the other files in the zip were not used.",
+      "attribution": "Contains textures from ambientCG.com, CC0 1.0 (no attribution required, credited anyway)",
+      "suggested_credit_by_ambientcg": "Created using Bricks 051 from ambientCG.com, licensed under the Creative Commons CC0 1.0 Universal"
+    },
+    {
+      "id": "stone",
+      "key": "stone",
+      "variant": 1,
+      "role": "wall",
+      "source": "ambientCG",
+      "ambientcg_id": "Bricks066",
+      "title": "Bricks 066",
+      "license": "CC0 1.0 Universal (public domain dedication)",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_info_url": "https://docs.ambientcg.com/license/",
+      "asset_page": "https://ambientcg.com/view?id=Bricks066",
+      "download_url": "https://ambientcg.com/get?file=Bricks066_1K-JPG.zip",
+      "zip_file": "Bricks066_1K-JPG.zip",
+      "zip_bytes": 7227168,
+      "zip_sha256": "88d35b7a9cd0e2085918e68a31e79a0a71420749bf1bde07a7ede001f6572cdb",
+      "retrieved": "2026-10-23",
+      "source_files_used": [
+        "Bricks066_1K-JPG_Color.jpg",
+        "Bricks066_1K-JPG_NormalGL.jpg",
+        "Bricks066_1K-JPG_Roughness.jpg"
+      ],
+      "outputs": [
+        "pbr/stone/albedo.jpg",
+        "pbr/stone/nr.jpg"
+      ],
+      "processing": "Derived work (allowed under CC0): resized to 512x512 for the repo and 1024x1024 for local use (not shipped). albedo.jpg: Color map decoded sRGB -> linear, luminance Y = 0.2126R + 0.7152G + 0.0722B divided by its mean, multiplied by a gain of 0.818 (0.8 per brief; raised only where the [0,1] clamp would pull the mean below 0.8, the literal recipe would leave a mean of 0.785) and clamped, so the mean linear value is 0.8 (measured 0.800 after JPEG, 15.0% of pixels at the clamp); re-encoded to sRGB as a 3-channel grey JPEG, quality 84; the 512 px version is a 2x2 area average taken in linear light. nr.jpg: NormalGL (OpenGL, +Y up) averaged 2x2 and renormalised at the output size, packed as R = normal.x, G = normal.y (n*0.5+0.5) with B = Roughness (2x2 average), JPEG quality 90, 4:4:4 chroma. Only the Color, NormalGL and Roughness maps (plus NormalDX for a convention check) were read; the other files in the zip were not used.",
+      "attribution": "Contains textures from ambientCG.com, CC0 1.0 (no attribution required, credited anyway)",
+      "suggested_credit_by_ambientcg": "Created using Bricks 066 from ambientCG.com, licensed under the Creative Commons CC0 1.0 Universal"
+    },
+    {
+      "id": "stone_2",
+      "key": "stone",
+      "variant": 2,
+      "role": "wall",
+      "source": "ambientCG",
+      "ambientcg_id": "Tiles143",
+      "title": "Tiles 143",
+      "license": "CC0 1.0 Universal (public domain dedication)",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_info_url": "https://docs.ambientcg.com/license/",
+      "asset_page": "https://ambientcg.com/view?id=Tiles143",
+      "download_url": "https://ambientcg.com/get?file=Tiles143_1K-JPG.zip",
+      "zip_file": "Tiles143_1K-JPG.zip",
+      "zip_bytes": 5102319,
+      "zip_sha256": "afbda7adaf4c0048a9224a09ab326fe0f8313e9add1343ad8c09c157a98d881f",
+      "retrieved": "2026-10-23",
+      "source_files_used": [
+        "Tiles143_1K-JPG_Color.jpg",
+        "Tiles143_1K-JPG_NormalGL.jpg",
+        "Tiles143_1K-JPG_Roughness.jpg"
+      ],
+      "outputs": [
+        "pbr/stone_2/albedo.jpg",
+        "pbr/stone_2/nr.jpg"
+      ],
+      "processing": "Derived work (allowed under CC0): resized to 512x512 for the repo and 1024x1024 for local use (not shipped). albedo.jpg: Color map decoded sRGB -> linear, luminance Y = 0.2126R + 0.7152G + 0.0722B divided by its mean, multiplied by a gain of 0.802 (0.8 per brief; raised only where the [0,1] clamp would pull the mean below 0.8) and clamped, so the mean linear value is 0.8 (measured 0.800 after JPEG, 3.9% of pixels at the clamp); re-encoded to sRGB as a 3-channel grey JPEG, quality 84; the 512 px version is a 2x2 area average taken in linear light. nr.jpg: NormalGL (OpenGL, +Y up) averaged 2x2 and renormalised at the output size, packed as R = normal.x, G = normal.y (n*0.5+0.5) with B = Roughness (2x2 average), JPEG quality 90, 4:4:4 chroma. Only the Color, NormalGL and Roughness maps (plus NormalDX for a convention check) were read; the other files in the zip were not used.",
+      "attribution": "Contains textures from ambientCG.com, CC0 1.0 (no attribution required, credited anyway)",
+      "suggested_credit_by_ambientcg": "Created using Tiles 143 from ambientCG.com, licensed under the Creative Commons CC0 1.0 Universal"
+    },
+    {
+      "id": "concrete",
+      "key": "concrete",
+      "variant": 1,
+      "role": "wall",
+      "source": "ambientCG",
+      "ambientcg_id": "Concrete034",
+      "title": "Concrete 034",
+      "license": "CC0 1.0 Universal (public domain dedication)",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_info_url": "https://docs.ambientcg.com/license/",
+      "asset_page": "https://ambientcg.com/view?id=Concrete034",
+      "download_url": "https://ambientcg.com/get?file=Concrete034_1K-JPG.zip",
+      "zip_file": "Concrete034_1K-JPG.zip",
+      "zip_bytes": 3657575,
+      "zip_sha256": "5839d284d94ffb8d2a56df742ec522b13dd311c52dbd42b8fd33f0409ceedb81",
+      "retrieved": "2026-10-23",
+      "source_files_used": [
+        "Concrete034_1K-JPG_Color.jpg",
+        "Concrete034_1K-JPG_NormalGL.jpg",
+        "Concrete034_1K-JPG_Roughness.jpg"
+      ],
+      "outputs": [
+        "pbr/concrete/albedo.jpg",
+        "pbr/concrete/nr.jpg"
+      ],
+      "processing": "Derived work (allowed under CC0): resized to 512x512 for the repo and 1024x1024 for local use (not shipped). albedo.jpg: Color map decoded sRGB -> linear, luminance Y = 0.2126R + 0.7152G + 0.0722B divided by its mean, multiplied by a gain of 0.800 (0.8 per brief; raised only where the [0,1] clamp would pull the mean below 0.8) and clamped, so the mean linear value is 0.8 (measured 0.800 after JPEG, 0.0% of pixels at the clamp); re-encoded to sRGB as a 3-channel grey JPEG, quality 84; the 512 px version is a 2x2 area average taken in linear light. nr.jpg: NormalGL (OpenGL, +Y up) averaged 2x2 and renormalised at the output size, packed as R = normal.x, G = normal.y (n*0.5+0.5) with B = Roughness (2x2 average), JPEG quality 90, 4:4:4 chroma. Only the Color, NormalGL and Roughness maps (plus NormalDX for a convention check) were read; the other files in the zip were not used. The source maps are 1024x512 (2:1); the seamless source was repeated 1x2 (x by y) to form a square tile before resizing, so proportions are not distorted.",
+      "attribution": "Contains textures from ambientCG.com, CC0 1.0 (no attribution required, credited anyway)",
+      "suggested_credit_by_ambientcg": "Created using Concrete 034 from ambientCG.com, licensed under the Creative Commons CC0 1.0 Universal"
+    },
+    {
+      "id": "concrete_2",
+      "key": "concrete",
+      "variant": 2,
+      "role": "wall",
+      "source": "ambientCG",
+      "ambientcg_id": "Concrete031",
+      "title": "Concrete 031",
+      "license": "CC0 1.0 Universal (public domain dedication)",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_info_url": "https://docs.ambientcg.com/license/",
+      "asset_page": "https://ambientcg.com/view?id=Concrete031",
+      "download_url": "https://ambientcg.com/get?file=Concrete031_1K-JPG.zip",
+      "zip_file": "Concrete031_1K-JPG.zip",
+      "zip_bytes": 7823020,
+      "zip_sha256": "3068e551435d3cdae3942017799d8871b940c88ebfaf5c2b87376972ae448fd6",
+      "retrieved": "2026-10-23",
+      "source_files_used": [
+        "Concrete031_1K-JPG_Color.jpg",
+        "Concrete031_1K-JPG_NormalGL.jpg",
+        "Concrete031_1K-JPG_Roughness.jpg"
+      ],
+      "outputs": [
+        "pbr/concrete_2/albedo.jpg",
+        "pbr/concrete_2/nr.jpg"
+      ],
+      "processing": "Derived work (allowed under CC0): resized to 512x512 for the repo and 1024x1024 for local use (not shipped). albedo.jpg: Color map decoded sRGB -> linear, luminance Y = 0.2126R + 0.7152G + 0.0722B divided by its mean, multiplied by a gain of 0.808 (0.8 per brief; raised only where the [0,1] clamp would pull the mean below 0.8, the literal recipe would leave a mean of 0.793) and clamped, so the mean linear value is 0.8 (measured 0.800 after JPEG, 10.5% of pixels at the clamp); re-encoded to sRGB as a 3-channel grey JPEG, quality 84; the 512 px version is a 2x2 area average taken in linear light. nr.jpg: NormalGL (OpenGL, +Y up) averaged 2x2 and renormalised at the output size, packed as R = normal.x, G = normal.y (n*0.5+0.5) with B = Roughness (2x2 average), JPEG quality 90, 4:4:4 chroma. Only the Color, NormalGL and Roughness maps (plus NormalDX for a convention check) were read; the other files in the zip were not used.",
+      "attribution": "Contains textures from ambientCG.com, CC0 1.0 (no attribution required, credited anyway)",
+      "suggested_credit_by_ambientcg": "Created using Concrete 031 from ambientCG.com, licensed under the Creative Commons CC0 1.0 Universal"
+    },
+    {
+      "id": "wood",
+      "key": "wood",
+      "variant": 1,
+      "role": "wall",
+      "source": "ambientCG",
+      "ambientcg_id": "WoodSiding009",
+      "title": "Wood Siding 009",
+      "license": "CC0 1.0 Universal (public domain dedication)",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_info_url": "https://docs.ambientcg.com/license/",
+      "asset_page": "https://ambientcg.com/view?id=WoodSiding009",
+      "download_url": "https://ambientcg.com/get?file=WoodSiding009_1K-JPG.zip",
+      "zip_file": "WoodSiding009_1K-JPG.zip",
+      "zip_bytes": 4257092,
+      "zip_sha256": "58512fc4df9b7ff0d9adb49bb562e8e7f65b510de6231afadf124505b6274de4",
+      "retrieved": "2026-10-23",
+      "source_files_used": [
+        "WoodSiding009_1K-JPG_Color.jpg",
+        "WoodSiding009_1K-JPG_NormalGL.jpg",
+        "WoodSiding009_1K-JPG_Roughness.jpg"
+      ],
+      "outputs": [
+        "pbr/wood/albedo.jpg",
+        "pbr/wood/nr.jpg"
+      ],
+      "processing": "Derived work (allowed under CC0): resized to 512x512 for the repo and 1024x1024 for local use (not shipped). albedo.jpg: Color map decoded sRGB -> linear, luminance Y = 0.2126R + 0.7152G + 0.0722B divided by its mean, multiplied by a gain of 0.801 (0.8 per brief; raised only where the [0,1] clamp would pull the mean below 0.8) and clamped, so the mean linear value is 0.8 (measured 0.800 after JPEG, 2.2% of pixels at the clamp); re-encoded to sRGB as a 3-channel grey JPEG, quality 84; the 512 px version is a 2x2 area average taken in linear light. nr.jpg: NormalGL (OpenGL, +Y up) averaged 2x2 and renormalised at the output size, packed as R = normal.x, G = normal.y (n*0.5+0.5) with B = Roughness (2x2 average), JPEG quality 90, 4:4:4 chroma. Only the Color, NormalGL and Roughness maps (plus NormalDX for a convention check) were read; the other files in the zip were not used. The source maps are 1024x512 (2:1); the seamless source was repeated 1x2 (x by y) to form a square tile before resizing, so proportions are not distorted.",
+      "attribution": "Contains textures from ambientCG.com, CC0 1.0 (no attribution required, credited anyway)",
+      "suggested_credit_by_ambientcg": "Created using Wood Siding 009 from ambientCG.com, licensed under the Creative Commons CC0 1.0 Universal"
+    },
+    {
+      "id": "metal",
+      "key": "metal",
+      "variant": 1,
+      "role": "wall",
+      "source": "ambientCG",
+      "ambientcg_id": "CorrugatedSteel005",
+      "title": "Corrugated Steel 005",
+      "license": "CC0 1.0 Universal (public domain dedication)",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_info_url": "https://docs.ambientcg.com/license/",
+      "asset_page": "https://ambientcg.com/view?id=CorrugatedSteel005",
+      "download_url": "https://ambientcg.com/get?file=CorrugatedSteel005_1K-JPG.zip",
+      "zip_file": "CorrugatedSteel005_1K-JPG.zip",
+      "zip_bytes": 5894008,
+      "zip_sha256": "4198faced790c75c551750d323ef384ea1ab353463b2067f44f8e5f5ff2d1a09",
+      "retrieved": "2026-10-23",
+      "source_files_used": [
+        "CorrugatedSteel005_1K-JPG_Color.jpg",
+        "CorrugatedSteel005_1K-JPG_NormalGL.jpg",
+        "CorrugatedSteel005_1K-JPG_Roughness.jpg"
+      ],
+      "outputs": [
+        "pbr/metal/albedo.jpg",
+        "pbr/metal/nr.jpg"
+      ],
+      "processing": "Derived work (allowed under CC0): resized to 512x512 for the repo and 1024x1024 for local use (not shipped). albedo.jpg: Color map decoded sRGB -> linear, luminance Y = 0.2126R + 0.7152G + 0.0722B divided by its mean, multiplied by a gain of 0.805 (0.8 per brief; raised only where the [0,1] clamp would pull the mean below 0.8, the literal recipe would leave a mean of 0.795) and clamped, so the mean linear value is 0.8 (measured 0.800 after JPEG, 7.9% of pixels at the clamp); re-encoded to sRGB as a 3-channel grey JPEG, quality 84; the 512 px version is a 2x2 area average taken in linear light. nr.jpg: NormalGL (OpenGL, +Y up) averaged 2x2 and renormalised at the output size, packed as R = normal.x, G = normal.y (n*0.5+0.5) with B = Roughness (2x2 average), JPEG quality 90, 4:4:4 chroma. Only the Color, NormalGL and Roughness maps (plus NormalDX for a convention check) were read; the other files in the zip were not used.",
+      "attribution": "Contains textures from ambientCG.com, CC0 1.0 (no attribution required, credited anyway)",
+      "suggested_credit_by_ambientcg": "Created using Corrugated Steel 005 from ambientCG.com, licensed under the Creative Commons CC0 1.0 Universal"
+    },
+    {
+      "id": "tiles",
+      "key": "tiles",
+      "variant": 1,
+      "role": "roof",
+      "source": "ambientCG",
+      "ambientcg_id": "RoofingTiles014A",
+      "title": "Roofing Tiles 014 A",
+      "license": "CC0 1.0 Universal (public domain dedication)",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_info_url": "https://docs.ambientcg.com/license/",
+      "asset_page": "https://ambientcg.com/view?id=RoofingTiles014A",
+      "download_url": "https://ambientcg.com/get?file=RoofingTiles014A_1K-JPG.zip",
+      "zip_file": "RoofingTiles014A_1K-JPG.zip",
+      "zip_bytes": 5001373,
+      "zip_sha256": "b928f75b476df36417e01b6ab60057cb94f65abd035d7a1eaf7ea884ee0f1521",
+      "retrieved": "2026-10-23",
+      "source_files_used": [
+        "RoofingTiles014A_1K-JPG_Color.jpg",
+        "RoofingTiles014A_1K-JPG_NormalGL.jpg",
+        "RoofingTiles014A_1K-JPG_Roughness.jpg"
+      ],
+      "outputs": [
+        "pbr/tiles/albedo.jpg",
+        "pbr/tiles/nr.jpg"
+      ],
+      "processing": "Derived work (allowed under CC0): resized to 512x512 for the repo and 1024x1024 for local use (not shipped). albedo.jpg: Color map decoded sRGB -> linear, luminance Y = 0.2126R + 0.7152G + 0.0722B divided by its mean, multiplied by a gain of 0.801 (0.8 per brief; raised only where the [0,1] clamp would pull the mean below 0.8) and clamped, so the mean linear value is 0.8 (measured 0.800 after JPEG, 2.9% of pixels at the clamp); re-encoded to sRGB as a 3-channel grey JPEG, quality 84; the 512 px version is a 2x2 area average taken in linear light. nr.jpg: NormalGL (OpenGL, +Y up) averaged 2x2 and renormalised at the output size, packed as R = normal.x, G = normal.y (n*0.5+0.5) with B = Roughness (2x2 average), JPEG quality 90, 4:4:4 chroma. Only the Color, NormalGL and Roughness maps (plus NormalDX for a convention check) were read; the other files in the zip were not used.",
+      "attribution": "Contains textures from ambientCG.com, CC0 1.0 (no attribution required, credited anyway)",
+      "suggested_credit_by_ambientcg": "Created using Roofing Tiles 014 A from ambientCG.com, licensed under the Creative Commons CC0 1.0 Universal"
+    },
+    {
+      "id": "tiles_2",
+      "key": "tiles",
+      "variant": 2,
+      "role": "roof",
+      "source": "ambientCG",
+      "ambientcg_id": "RoofingTiles012A",
+      "title": "Roofing Tiles 012 A",
+      "license": "CC0 1.0 Universal (public domain dedication)",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_info_url": "https://docs.ambientcg.com/license/",
+      "asset_page": "https://ambientcg.com/view?id=RoofingTiles012A",
+      "download_url": "https://ambientcg.com/get?file=RoofingTiles012A_1K-JPG.zip",
+      "zip_file": "RoofingTiles012A_1K-JPG.zip",
+      "zip_bytes": 4757375,
+      "zip_sha256": "ab6ac400cd849c76c636912186bfda8feab2b055fa107c5dbea0d3ebbaadd9cb",
+      "retrieved": "2026-10-23",
+      "source_files_used": [
+        "RoofingTiles012A_1K-JPG_Color.jpg",
+        "RoofingTiles012A_1K-JPG_NormalGL.jpg",
+        "RoofingTiles012A_1K-JPG_Roughness.jpg"
+      ],
+      "outputs": [
+        "pbr/tiles_2/albedo.jpg",
+        "pbr/tiles_2/nr.jpg"
+      ],
+      "processing": "Derived work (allowed under CC0): resized to 512x512 for the repo and 1024x1024 for local use (not shipped). albedo.jpg: Color map decoded sRGB -> linear, luminance Y = 0.2126R + 0.7152G + 0.0722B divided by its mean, multiplied by a gain of 0.800 (0.8 per brief; raised only where the [0,1] clamp would pull the mean below 0.8) and clamped, so the mean linear value is 0.8 (measured 0.800 after JPEG, 0.0% of pixels at the clamp); re-encoded to sRGB as a 3-channel grey JPEG, quality 84; the 512 px version is a 2x2 area average taken in linear light. nr.jpg: NormalGL (OpenGL, +Y up) averaged 2x2 and renormalised at the output size, packed as R = normal.x, G = normal.y (n*0.5+0.5) with B = Roughness (2x2 average), JPEG quality 90, 4:4:4 chroma. Only the Color, NormalGL and Roughness maps (plus NormalDX for a convention check) were read; the other files in the zip were not used.",
+      "attribution": "Contains textures from ambientCG.com, CC0 1.0 (no attribution required, credited anyway)",
+      "suggested_credit_by_ambientcg": "Created using Roofing Tiles 012 A from ambientCG.com, licensed under the Creative Commons CC0 1.0 Universal"
+    },
+    {
+      "id": "slate",
+      "key": "slate",
+      "variant": 1,
+      "role": "roof",
+      "source": "ambientCG",
+      "ambientcg_id": "RoofingTiles003",
+      "title": "Roofing Tiles 003",
+      "license": "CC0 1.0 Universal (public domain dedication)",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_info_url": "https://docs.ambientcg.com/license/",
+      "asset_page": "https://ambientcg.com/view?id=RoofingTiles003",
+      "download_url": "https://ambientcg.com/get?file=RoofingTiles003_1K-JPG.zip",
+      "zip_file": "RoofingTiles003_1K-JPG.zip",
+      "zip_bytes": 7675939,
+      "zip_sha256": "0fd7342268bf9e5949331a9a8e679762516605f79a3a3e4cabea1dce68ce15c4",
+      "retrieved": "2026-10-23",
+      "source_files_used": [
+        "RoofingTiles003_1K-JPG_Color.jpg",
+        "RoofingTiles003_1K-JPG_NormalGL.jpg",
+        "RoofingTiles003_1K-JPG_Roughness.jpg"
+      ],
+      "outputs": [
+        "pbr/slate/albedo.jpg",
+        "pbr/slate/nr.jpg"
+      ],
+      "processing": "Derived work (allowed under CC0): resized to 512x512 for the repo and 1024x1024 for local use (not shipped). albedo.jpg: Color map decoded sRGB -> linear, luminance Y = 0.2126R + 0.7152G + 0.0722B divided by its mean, multiplied by a gain of 1.042 (0.8 per brief; raised only where the [0,1] clamp would pull the mean below 0.8, the literal recipe would leave a mean of 0.680) and clamped, so the mean linear value is 0.8 (measured 0.797 after JPEG, 37.1% of pixels at the clamp); re-encoded to sRGB as a 3-channel grey JPEG, quality 84; the 512 px version is a 2x2 area average taken in linear light. nr.jpg: NormalGL (OpenGL, +Y up) averaged 2x2 and renormalised at the output size, packed as R = normal.x, G = normal.y (n*0.5+0.5) with B = Roughness (2x2 average), JPEG quality 90, 4:4:4 chroma. Only the Color, NormalGL and Roughness maps (plus NormalDX for a convention check) were read; the other files in the zip were not used.",
+      "attribution": "Contains textures from ambientCG.com, CC0 1.0 (no attribution required, credited anyway)",
+      "suggested_credit_by_ambientcg": "Created using Roofing Tiles 003 from ambientCG.com, licensed under the Creative Commons CC0 1.0 Universal"
+    },
+    {
+      "id": "tar",
+      "key": "tar",
+      "variant": 1,
+      "role": "roof",
+      "source": "ambientCG",
+      "ambientcg_id": "Gravel024",
+      "title": "Gravel 024",
+      "license": "CC0 1.0 Universal (public domain dedication)",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_info_url": "https://docs.ambientcg.com/license/",
+      "asset_page": "https://ambientcg.com/view?id=Gravel024",
+      "download_url": "https://ambientcg.com/get?file=Gravel024_1K-JPG.zip",
+      "zip_file": "Gravel024_1K-JPG.zip",
+      "zip_bytes": 9639926,
+      "zip_sha256": "3d1a84efeb0b76b679fbf9f66bf8c36c1980e1d00cf92a3e7bec8ccb0bbb63f5",
+      "retrieved": "2026-10-23",
+      "source_files_used": [
+        "Gravel024_1K-JPG_Color.jpg",
+        "Gravel024_1K-JPG_NormalGL.jpg",
+        "Gravel024_1K-JPG_Roughness.jpg"
+      ],
+      "outputs": [
+        "pbr/tar/albedo.jpg",
+        "pbr/tar/nr.jpg"
+      ],
+      "processing": "Derived work (allowed under CC0): resized to 512x512 for the repo and 1024x1024 for local use (not shipped). albedo.jpg: Color map decoded sRGB -> linear, luminance Y = 0.2126R + 0.7152G + 0.0722B divided by its mean, multiplied by a gain of 0.979 (0.8 per brief; raised only where the [0,1] clamp would pull the mean below 0.8, the literal recipe would leave a mean of 0.718) and clamped, so the mean linear value is 0.8 (measured 0.795 after JPEG, 43.8% of pixels at the clamp); re-encoded to sRGB as a 3-channel grey JPEG, quality 84; the 512 px version is a 2x2 area average taken in linear light. nr.jpg: NormalGL (OpenGL, +Y up) averaged 2x2 and renormalised at the output size, packed as R = normal.x, G = normal.y (n*0.5+0.5) with B = Roughness (2x2 average), JPEG quality 90, 4:4:4 chroma. Only the Color, NormalGL and Roughness maps (plus NormalDX for a convention check) were read; the other files in the zip were not used.",
+      "attribution": "Contains textures from ambientCG.com, CC0 1.0 (no attribution required, credited anyway)",
+      "suggested_credit_by_ambientcg": "Created using Gravel 024 from ambientCG.com, licensed under the Creative Commons CC0 1.0 Universal"
+    },
+    {
+      "id": "metal_roof",
+      "key": "metal",
+      "variant": 1,
+      "role": "roof",
+      "source": "ambientCG",
+      "ambientcg_id": "CorrugatedSteel009",
+      "title": "Corrugated Steel 009",
+      "license": "CC0 1.0 Universal (public domain dedication)",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_info_url": "https://docs.ambientcg.com/license/",
+      "asset_page": "https://ambientcg.com/view?id=CorrugatedSteel009",
+      "download_url": "https://ambientcg.com/get?file=CorrugatedSteel009_1K-JPG.zip",
+      "zip_file": "CorrugatedSteel009_1K-JPG.zip",
+      "zip_bytes": 3912365,
+      "zip_sha256": "fa917cba8bbf4ceb645cf27e4c1a4a17621d3b1ad44a4125997cdd05662711fb",
+      "retrieved": "2026-10-23",
+      "source_files_used": [
+        "CorrugatedSteel009_1K-JPG_Color.jpg",
+        "CorrugatedSteel009_1K-JPG_NormalGL.jpg",
+        "CorrugatedSteel009_1K-JPG_Roughness.jpg"
+      ],
+      "outputs": [
+        "pbr/metal_roof/albedo.jpg",
+        "pbr/metal_roof/nr.jpg"
+      ],
+      "processing": "Derived work (allowed under CC0): resized to 512x512 for the repo and 1024x1024 for local use (not shipped). albedo.jpg: Color map decoded sRGB -> linear, luminance Y = 0.2126R + 0.7152G + 0.0722B divided by its mean, multiplied by a gain of 0.842 (0.8 per brief; raised only where the [0,1] clamp would pull the mean below 0.8, the literal recipe would leave a mean of 0.775) and clamped, so the mean linear value is 0.8 (measured 0.799 after JPEG, 32.2% of pixels at the clamp); re-encoded to sRGB as a 3-channel grey JPEG, quality 84; the 512 px version is a 2x2 area average taken in linear light. nr.jpg: NormalGL (OpenGL, +Y up) averaged 2x2 and renormalised at the output size, packed as R = normal.x, G = normal.y (n*0.5+0.5) with B = Roughness (2x2 average), JPEG quality 90, 4:4:4 chroma. Only the Color, NormalGL and Roughness maps (plus NormalDX for a convention check) were read; the other files in the zip were not used. The source maps are 1024x512 (2:1); the seamless source was repeated 1x2 (x by y) to form a square tile before resizing, so proportions are not distorted.",
+      "attribution": "Contains textures from ambientCG.com, CC0 1.0 (no attribution required, credited anyway)",
+      "suggested_credit_by_ambientcg": "Created using Corrugated Steel 009 from ambientCG.com, licensed under the Creative Commons CC0 1.0 Universal"
+    },
+    {
+      "id": "asphalt",
+      "key": "asphalt",
+      "variant": 1,
+      "role": "ground",
+      "source": "ambientCG",
+      "ambientcg_id": "Asphalt031",
+      "title": "Asphalt 031",
+      "license": "CC0 1.0 Universal (public domain dedication)",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_info_url": "https://docs.ambientcg.com/license/",
+      "asset_page": "https://ambientcg.com/view?id=Asphalt031",
+      "download_url": "https://ambientcg.com/get?file=Asphalt031_1K-JPG.zip",
+      "zip_file": "Asphalt031_1K-JPG.zip",
+      "zip_bytes": 8699189,
+      "zip_sha256": "f98114b8fb083fc65925c3b4568b131e37c9a23357d432a16e59676dbc69f964",
+      "retrieved": "2026-10-23",
+      "source_files_used": [
+        "Asphalt031_1K-JPG_Color.jpg",
+        "Asphalt031_1K-JPG_NormalGL.jpg",
+        "Asphalt031_1K-JPG_Roughness.jpg"
+      ],
+      "outputs": [
+        "pbr/asphalt/albedo.jpg",
+        "pbr/asphalt/nr.jpg"
+      ],
+      "processing": "Derived work (allowed under CC0): resized to 512x512 for the repo and 1024x1024 for local use (not shipped). albedo.jpg: Color map decoded sRGB -> linear, luminance Y = 0.2126R + 0.7152G + 0.0722B divided by its mean, multiplied by a gain of 0.882 (0.8 per brief; raised only where the [0,1] clamp would pull the mean below 0.8, the literal recipe would leave a mean of 0.749) and clamped, so the mean linear value is 0.8 (measured 0.798 after JPEG, 29.3% of pixels at the clamp); re-encoded to sRGB as a 3-channel grey JPEG, quality 84; the 512 px version is a 2x2 area average taken in linear light. nr.jpg: NormalGL (OpenGL, +Y up) averaged 2x2 and renormalised at the output size, packed as R = normal.x, G = normal.y (n*0.5+0.5) with B = Roughness (2x2 average), JPEG quality 90, 4:4:4 chroma. Only the Color, NormalGL and Roughness maps (plus NormalDX for a convention check) were read; the other files in the zip were not used.",
+      "attribution": "Contains textures from ambientCG.com, CC0 1.0 (no attribution required, credited anyway)",
+      "suggested_credit_by_ambientcg": "Created using Asphalt 031 from ambientCG.com, licensed under the Creative Commons CC0 1.0 Universal"
+    },
+    {
+      "id": "paving_stones",
+      "key": "paving_stones",
+      "variant": 1,
+      "role": "ground",
+      "source": "ambientCG",
+      "ambientcg_id": "PavingStones111",
+      "title": "Paving Stones 111",
+      "license": "CC0 1.0 Universal (public domain dedication)",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_info_url": "https://docs.ambientcg.com/license/",
+      "asset_page": "https://ambientcg.com/view?id=PavingStones111",
+      "download_url": "https://ambientcg.com/get?file=PavingStones111_1K-JPG.zip",
+      "zip_file": "PavingStones111_1K-JPG.zip",
+      "zip_bytes": 4675374,
+      "zip_sha256": "6229c66cde8538a8278f891cc242275e10176a6fee588a290012368984d9d834",
+      "retrieved": "2026-10-23",
+      "source_files_used": [
+        "PavingStones111_1K-JPG_Color.jpg",
+        "PavingStones111_1K-JPG_NormalGL.jpg",
+        "PavingStones111_1K-JPG_Roughness.jpg"
+      ],
+      "outputs": [
+        "pbr/paving_stones/albedo.jpg",
+        "pbr/paving_stones/nr.jpg"
+      ],
+      "processing": "Derived work (allowed under CC0): resized to 512x512 for the repo and 1024x1024 for local use (not shipped). albedo.jpg: Color map decoded sRGB -> linear, luminance Y = 0.2126R + 0.7152G + 0.0722B divided by its mean, multiplied by a gain of 0.832 (0.8 per brief; raised only where the [0,1] clamp would pull the mean below 0.8, the literal recipe would leave a mean of 0.776) and clamped, so the mean linear value is 0.8 (measured 0.799 after JPEG, 20.1% of pixels at the clamp); re-encoded to sRGB as a 3-channel grey JPEG, quality 84; the 512 px version is a 2x2 area average taken in linear light. nr.jpg: NormalGL (OpenGL, +Y up) averaged 2x2 and renormalised at the output size, packed as R = normal.x, G = normal.y (n*0.5+0.5) with B = Roughness (2x2 average), JPEG quality 90, 4:4:4 chroma. Only the Color, NormalGL and Roughness maps (plus NormalDX for a convention check) were read; the other files in the zip were not used. The source maps are 1024x512 (2:1); the seamless source was repeated 1x2 (x by y) to form a square tile before resizing, so proportions are not distorted.",
+      "attribution": "Contains textures from ambientCG.com, CC0 1.0 (no attribution required, credited anyway)",
+      "suggested_credit_by_ambientcg": "Created using Paving Stones 111 from ambientCG.com, licensed under the Creative Commons CC0 1.0 Universal"
+    },
+    {
+      "id": "cobblestone",
+      "key": "cobblestone",
+      "variant": 1,
+      "role": "ground",
+      "source": "ambientCG",
+      "ambientcg_id": "PavingStones070",
+      "title": "Paving Stones 070",
+      "license": "CC0 1.0 Universal (public domain dedication)",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_info_url": "https://docs.ambientcg.com/license/",
+      "asset_page": "https://ambientcg.com/view?id=PavingStones070",
+      "download_url": "https://ambientcg.com/get?file=PavingStones070_1K-JPG.zip",
+      "zip_file": "PavingStones070_1K-JPG.zip",
+      "zip_bytes": 9046803,
+      "zip_sha256": "84be05ad935c2a8ea0dd3b82dd18c9e1faf7eeae222b85d96beb14ed16276132",
+      "retrieved": "2026-10-23",
+      "source_files_used": [
+        "PavingStones070_1K-JPG_Color.jpg",
+        "PavingStones070_1K-JPG_NormalGL.jpg",
+        "PavingStones070_1K-JPG_Roughness.jpg"
+      ],
+      "outputs": [
+        "pbr/cobblestone/albedo.jpg",
+        "pbr/cobblestone/nr.jpg"
+      ],
+      "processing": "Derived work (allowed under CC0): resized to 512x512 for the repo and 1024x1024 for local use (not shipped). albedo.jpg: Color map decoded sRGB -> linear, luminance Y = 0.2126R + 0.7152G + 0.0722B divided by its mean, multiplied by a gain of 0.892 (0.8 per brief; raised only where the [0,1] clamp would pull the mean below 0.8, the literal recipe would leave a mean of 0.751) and clamped, so the mean linear value is 0.8 (measured 0.797 after JPEG, 38.7% of pixels at the clamp); re-encoded to sRGB as a 3-channel grey JPEG, quality 84; the 512 px version is a 2x2 area average taken in linear light. nr.jpg: NormalGL (OpenGL, +Y up) averaged 2x2 and renormalised at the output size, packed as R = normal.x, G = normal.y (n*0.5+0.5) with B = Roughness (2x2 average), JPEG quality 90, 4:4:4 chroma. Only the Color, NormalGL and Roughness maps (plus NormalDX for a convention check) were read; the other files in the zip were not used.",
+      "attribution": "Contains textures from ambientCG.com, CC0 1.0 (no attribution required, credited anyway)",
+      "suggested_credit_by_ambientcg": "Created using Paving Stones 070 from ambientCG.com, licensed under the Creative Commons CC0 1.0 Universal"
+    }
+  ]
+}

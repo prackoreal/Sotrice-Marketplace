@@ -55,7 +55,7 @@
     },
     {
       "type": "ai-test",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "description": "Universal AI spin — one domain-agnostic request/response mechanism shared by the math spin's AI tab and, later, a city spin's own analyst UI, per the same 'one shared engine, two presentations' design already used for compute plugins elsewhere. Watches any entity's ai_request attribute (prompt + optional context payload + optional request_id/task_hint, no enumeration, pure subscribe-by-name) and calls the real Gemini API (gemini-3.8-flash capable / gemini-3.1-flash-lite budget, automatic per-request selection), writing an ai_response attribute back onto that same entity. Has no idea which spin, if any, is asking. Ships its own Settings UI (ai-test-ui) for the real per-user Gemini API key and cost/quality bias, falling back to a dev-only local-secrets key when neither has ever been set.",
       "concepts": [
         "UniversalAI"
@@ -79,7 +79,7 @@
     },
     {
       "type": "agent-behavior-test",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "description": "Agent-behavior spin skeleton — the next layer on top of physics-test's synthetic scene. Watches physics-test's published position/physics_lod_tier per entity (no enumeration, pure subscribe-by-name). If city-roads' real OSM road network is available, pathfinds (Dijkstra) to a real destination and walks the actual route; otherwise falls back to picking a random nearby point. Publishes desired_target, which physics-test's own steering (if running) consumes — this file has no idea whether anything is actually listening.",
       "concepts": [
         "AgentBehavior"
@@ -105,7 +105,7 @@
     },
     {
       "type": "city-buildings",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "description": "A real, minimal building-footprint data source — the same small Klosterneuburg area city-roads covers, aligned to the same coordinate origin. Publishes one entity per real OSM building (footprint polygon, ground position, height — real where tagged, a documented estimate where not) plus a real building_attribution string. Keyless, free, ODbL OSM data only — NOT the photorealistic Google 3D Tiles/Cesium ingestion, which needs a real external account/API key decision.",
       "concepts": [
         "CityBuildings"
@@ -130,7 +130,7 @@
     },
     {
       "type": "rendering-test",
-      "version": "0.8.0",
+      "version": "0.9.0",
       "description": "Rendering spin for the city simulation: a real three.js spin-ui:// viewer for physics-test's synthetic scene (subscribes to position/orientation/physics_lod_tier/shape/radius/half_extents, no enumeration, pure subscribe-by-name), with one real adaptive-fidelity mechanism (full geometry for 'full' LOD tier bodies, cheap impostors for 'kinematic' tier bodies) and its own settings panel (quality preset, DXGI-enumerated compute device choice, remote-compute stub, city area picker, Cesium ion token, grid line color). Also draws city-roads/city-buildings' real OpenStreetMap Klosterneuburg extract (real road lines, basic extruded building footprints, AI-classified wall materials) plus agent-behavior-test's own moving walker/vehicle markers. Three switchable views, each a real Core-backed render_settings.view_mode (survives reload): a vector scene, a Photorealistic mode with real Google Photorealistic 3D Tiles via CesiumJS + a user's own Cesium ion token, and a new Grid view (pure wireframe/edges-only, one configurable line color) with real drag-to-move building repositioning that regenerates affected roads live. Every building, agent, and physics body in the scene is click-selectable (a real raycast against each one's own mesh) and opens a generic property-inspector panel listing EVERY real Core attribute that entity currently has, editable in place. Includes a built-in AI analyst panel (ai-test request/response round trip) for asking real questions about the live city data (traffic, materials, road proximity) with user-toggleable context layers. Not the eventual GTA6-style adaptive renderer — no ray tracing, no temporal denoising.",
       "concepts": [
         "Rendering"
@@ -171,7 +171,7 @@
     },
     {
       "type": "city-data",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "description": "Real city data for any place on Earth. Searches a place by name (Nominatim), downloads its OpenStreetMap roads, rail/subway/tram lines and stations, buildings, ground, POIs and terrain (Overpass mirrors with fallback + AWS terrain tiles), caches it per area (instant and offline the second time) and publishes it as schema-v1 city attributes: a control entity (city_dataset, city_progress, city_terrain, city_rail, city_road_graph, city_surfaces) plus one entity per 500 m tile (ct_roads, ct_buildings, ct_ground, ct_pois, ct_rail_ways). Area changes live via city_area_request / city_area_cancel; material overrides from the looks pipeline via city_surface_patch. Data (c) OpenStreetMap contributors, ODbL.",
       "concepts": [
         "CityData"

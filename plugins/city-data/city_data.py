@@ -15,6 +15,10 @@ its real OpenStreetMap data to Core (schema v1: docs/city-schema/schema.md).
   unused ones are published as retired (`ct_tile.retired = true`).
 * `city_surface_patch` -> persisted override slots (`city_surfaces`), never
   edits of the dataset itself.
+* Looks (docs/city-schema/looks.md): `ct_looks` per tile (published right after
+  `ct_tile`, before the tile's other attributes), `city_looks_meta` on the
+  control entity, `city_looks_patch` -> looks_overrides.json -> `city_looks_ack`
+  and a republish of only the touched tiles' `ct_looks`.
 
 The legacy plugins (city-roads -> `road_network`, city-buildings -> building
 entities) read the very same cached dataset and follow `city_dataset`.
@@ -31,6 +35,7 @@ import threading
 import time
 from typing import Optional
 
+import city_appearance as looks_lib
 import citydata_store as store
 import osm_city
 import osm_fetch
@@ -142,6 +147,11 @@ def apply_building_overlay(ds: dict, overlay: dict) -> int:
         b = by_legacy.get(lid)
         if b is None or not isinstance(rec, dict):
             continue
+        # Additive: remember what the building looked like BEFORE the first edit (`orig`), so a renderer that shows a
+        # separate photographic mesh of the real place (photorealistic view) knows what to cut out even after a
+        # restart / undo, when the published geometry is already the edited one. Absent for untouched buildings.
+        if "orig" not in b:
+            b["orig"] = {"outer": [list(q) for q in b["footprint"]["outer"]], "height_m": b.get("height_m"), "wall_material": ((b.get("surfaces") or {}).get("wall") or {}).get("material")}
         if isinstance(rec.get("height_m"), (int, float)):
             b["height_m"] = float(rec["height_m"])
             b["height_source"] = "user"
@@ -288,6 +298,16 @@ class CityData:
         self.tile_hash: dict[tuple[int, int], int] = {}
         self.tile_entity_of: dict[tuple[int, int], int] = {}
         self.last_dataset: Optional[dict] = None  # last READY city_dataset payload, restored after a failed/cancelled load
+        # looks (rule + ai + osm + user appearance, see build_looks)
+        self.looks: Optional[looks_lib.AreaLooks] = None
+        self.looks_doc: dict = looks_lib.empty_looks(None)
+        self.looks_store: Optional[looks_lib.OverridesStore] = None
+        self.looks_tags: dict = {}
+        self.looks_records: dict[str, dict] = {}
+        self.looks_tile_ids: dict[tuple[int, int], list[str]] = {}
+        self.looks_unit_tile: dict[str, tuple[int, int]] = {}
+        self.looks_tile_hash: dict[tuple[int, int], int] = {}
+        self.looks_meta: Optional[dict] = None
 
     # --- publishing helpers ---------------------------------------------------------
 
@@ -330,6 +350,7 @@ class CityData:
         if applied:
             print(f"[{self.name}] applied {applied} saved building edit(s) from the overlay")
         self.ds = ds
+        self.looks = None  # the previous area's looks must not take patches while this one is being published
         self._set_status("loading", area_meta, counts=ds.get("counts", {}))
         self.progress("publish", 0, 1, "Publishing to the city")
         surfaces = self.load_surfaces(area_meta["id"])
@@ -345,6 +366,8 @@ class CityData:
         ])
         tiles = partition_tiles(ds)
         keys = sorted(tiles)
+        looks_by_tile = self.build_looks(ds, tiles)
+        self.world.set_attribute(self.control, "city_looks_meta", self.looks_meta)
         self.tile_hash = {k: hash(json.dumps(tiles[k]["ct_buildings"], sort_keys=True)) for k in keys}
         self.tile_entity_of = {k: self.tile_entities[i] for i, k in enumerate(keys)} if len(self.tile_entities) >= len(keys) else {}
         while len(self.tile_entities) < len(keys):
@@ -355,6 +378,7 @@ class CityData:
             i, j = key
             data = tiles[key]
             updates.append((entity, "ct_tile", {"id": f"t_{i}_{j}", "i": i, "j": j, "bounds": {"x0": i * TILE_M, "z0": j * TILE_M, "x1": (i + 1) * TILE_M, "z1": (j + 1) * TILE_M}}))
+            updates.append((entity, "ct_looks", looks_by_tile.get(key, {})))  # before ct_buildings: the renderer builds a tile once, with its looks
             for attribute, value in data.items():
                 updates.append((entity, attribute, value))
             if len(updates) > 40:
@@ -363,7 +387,7 @@ class CityData:
         self.tile_entity_of = {k: self.tile_entities[i] for i, k in enumerate(keys)}
         for entity in self.tile_entities[len(keys):]:
             updates.append((entity, "ct_tile", {"id": None, "retired": True}))
-            updates.extend([(entity, "ct_roads", []), (entity, "ct_rail_ways", []), (entity, "ct_buildings", []), (entity, "ct_ground", {"areas": [], "lines": [], "trees": []}), (entity, "ct_pois", [])])
+            updates.extend([(entity, "ct_looks", {}), (entity, "ct_roads", []), (entity, "ct_rail_ways", []), (entity, "ct_buildings", []), (entity, "ct_ground", {"areas": [], "lines": [], "trees": []}), (entity, "ct_pois", [])])
         if updates:
             self.world.set_many(updates)
         t = ds["terrain"]
@@ -437,15 +461,149 @@ class CityData:
         with self.lock:
             apply_building_overlay(self.ds, store.load_overlay(self.area_id, "buildings", None, {}))
             tiles = partition_tiles(self.ds)
+            looks_changed = self.rebuild_looks(tiles)  # {tile key: records} where an edit changed the looks (height/type/name/move feed the rules)
             updates = []
             for key, data in tiles.items():
                 h = hash(json.dumps(data["ct_buildings"], sort_keys=True))
+                if key in looks_changed and key in self.tile_entity_of:
+                    updates.append((self.tile_entity_of[key], "ct_looks", looks_changed[key]))  # looks first, then the buildings that use them
                 if self.tile_hash.get(key) != h and key in self.tile_entity_of:
                     self.tile_hash[key] = h
                     updates.append((self.tile_entity_of[key], "ct_buildings", data["ct_buildings"]))
+            if self.looks is not None and self.looks.meta(self.looks_records) != self.looks_meta:
+                self.looks_meta = self.looks.meta(self.looks_records)
+                updates.append((self.control, "city_looks_meta", self.looks_meta))
             if updates:
                 self.world.set_many(updates)
-            self.world.set_attribute(self.control, "city_building_ack", {"ids": (value or {}).get("ids") if isinstance(value, dict) else None, "tiles_updated": len(updates)})
+            self.world.set_attribute(self.control, "city_building_ack", {"ids": (value or {}).get("ids") if isinstance(value, dict) else None, "tiles_updated": len([u for u in updates if u[1] == "ct_buildings"])})
+
+    # --- looks: appearance of every building (docs/city-schema/looks.md) -------------------------------------------
+
+    def build_looks(self, ds: dict, tiles: dict) -> dict:
+        """Builds the looks of the area being published and returns {tile key: {unit id: record}} (the content of each tile's
+        `ct_looks`). Rule + OSM records exist for every building even when the area has no looks.json yet; looks.json (AI) and
+        looks_overrides.json (user) are layered on top. NEVER raises: looks must not stop a tile from being published, a failure
+        just publishes empty looks and says why in `city_looks_meta`."""
+        area_id = ds["area"]["id"]
+        self.looks = None
+        self.looks_records, self.looks_tile_ids, self.looks_unit_tile, self.looks_tile_hash = {}, {}, {}, {}
+        try:
+            area_dir = store.area_dir(area_id)
+            self.looks_doc = looks_lib.read_looks(os.path.join(area_dir, looks_lib.LOOKS_FILE))
+            self.looks_store = looks_lib.OverridesStore(os.path.join(area_dir, looks_lib.OVERRIDES_FILE))
+            self.looks_tags = looks_lib.load_osm_tags(area_dir)
+            looks = looks_lib.AreaLooks(ds, self.looks_tags, ai_units=self.looks_doc["units"], overrides=self.looks_store.data, ai_meta=self.looks_doc)
+            records = looks.effective()
+            by_tile = looks_lib.partition_by_tile(records, tiles)
+            self._index_looks(records, by_tile)
+            self.looks_meta = looks.meta(records)
+            self.looks = looks
+            return by_tile
+        except Exception as exc:  # noqa: BLE001 - an enhancement layer: the city itself must still publish
+            print(f"[{self.name}] looks failed for {area_id}: {exc!r}")
+            self.looks = None
+            self.looks_meta = {"schema": looks_lib.SCHEMA, "area_id": area_id, "units": 0, "by_src": {s: 0 for s in looks_lib.SOURCES}, "error": str(exc)[:200]}
+            return {}
+
+    def _index_looks(self, records: dict, by_tile: dict) -> None:
+        self.looks_records = records
+        self.looks_tile_ids = {k: list(v) for k, v in by_tile.items()}
+        self.looks_unit_tile = {uid: k for k, v in by_tile.items() for uid in v}
+        self.looks_tile_hash = {k: hash(json.dumps(v, sort_keys=True)) for k, v in by_tile.items()}
+
+    def rebuild_looks(self, tiles: dict) -> dict:
+        """After a sandbox edit changed the dataset in memory: rebuild the looks from it and return {tile key: records} for the
+        tiles whose `ct_looks` changed (the caller publishes them BEFORE `ct_buildings`, so a moved building's record is always
+        in the tile that holds it). Caller holds the lock."""
+        if self.looks is None or self.looks_store is None:
+            return {}
+        try:
+            looks = looks_lib.AreaLooks(self.ds, self.looks_tags, ai_units=self.looks_doc["units"], overrides=self.looks_store.data, ai_meta=self.looks_doc)
+            records = looks.effective()
+            by_tile = looks_lib.partition_by_tile(records, tiles)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[{self.name}] looks rebuild failed: {exc!r}")
+            return {}
+        old_hash = self.looks_tile_hash
+        self.looks = looks
+        self._index_looks(records, by_tile)
+        return {k: v for k, v in by_tile.items() if self.looks_tile_hash[k] != old_hash.get(k)}
+
+    def republish_looks(self, ids) -> int:
+        """Recomputes the effective records of `ids` and republishes `ct_looks` of exactly the tiles whose content changed (and
+        `city_looks_meta` when the source counts changed). Returns the number of tiles republished. Caller holds the lock."""
+        looks = self.looks  # one reference for the whole call: an area switch may replace self.looks from the worker thread
+        if looks is None:
+            return 0
+        ids = list(ids)
+        self.looks_records.update(looks.effective(ids))
+        updates = []
+        for key in sorted({self.looks_unit_tile[uid] for uid in ids if uid in self.looks_unit_tile}):
+            entity = self.tile_entity_of.get(key)
+            if entity is None:
+                continue
+            records = {uid: self.looks_records[uid] for uid in self.looks_tile_ids[key]}
+            h = hash(json.dumps(records, sort_keys=True))
+            if h != self.looks_tile_hash.get(key):
+                self.looks_tile_hash[key] = h
+                updates.append((entity, "ct_looks", records))
+        tiles_updated = len(updates)
+        meta = looks.meta(self.looks_records)
+        if meta != self.looks_meta:
+            self.looks_meta = meta
+            updates.append((self.control, "city_looks_meta", meta))
+        if updates:
+            self.world.set_many(updates)
+        return tiles_updated
+
+    def on_looks_patch(self, entity: int, attribute: str, value, source) -> None:
+        """`city_looks_patch` {patches: [{id, set?, clear?}], batch_id?} (or a single {id, set?, clear?}): the user's edits of
+        how buildings look. `id` is a building/part id (a ROOT building id applies to all its parts, a part id to that part;
+        the part wins). `clear` is applied before `set`; `set` is a partial record (nested partials allowed) validated against
+        the closed vocabulary: an item with an unknown id or a bad value is rejected as a whole and never stored. Accepted
+        items are persisted ONCE into looks_overrides.json (user source: always accepted, never downgraded), then only the
+        touched tiles' `ct_looks` are republished, and `city_looks_ack` {batch_id, accepted, rejected: [{id, reason}],
+        rejected_count, tiles_updated} says what happened."""
+        if entity != self.control or not isinstance(value, dict) or not self.area_id:
+            return
+        patches = value.get("patches") if isinstance(value.get("patches"), list) else [value]
+        batch_id = value.get("batch_id")
+        with self.lock:
+            looks, overrides = self.looks, self.looks_store  # one reference each: an area switch may replace them from the worker thread
+            if looks is None or overrides is None:
+                self.world.set_attribute(self.control, "city_looks_ack", {"batch_id": batch_id, "accepted": 0, "rejected": [{"id": None, "reason": "looks are not ready (area still loading)"}], "rejected_count": 1, "tiles_updated": 0})
+                return
+            new, ack, touched = looks_lib.patch_overrides(overrides.data, patches, looks.signals.by_id, batch_id)
+            tiles_updated = 0
+            if ack["accepted"]:
+                old = overrides.data
+                overrides.data = new
+                try:
+                    overrides.save()
+                except OSError as exc:
+                    overrides.data = old
+                    ack = {"batch_id": batch_id, "accepted": 0, "rejected": [{"id": None, "reason": f"could not save looks_overrides.json: {exc}"}], "rejected_count": 1}
+                else:
+                    looks.set_overrides(new)
+                    tiles_updated = self.republish_looks(looks.touched(touched))
+            self.world.set_attribute(self.control, "city_looks_ack", {**ack, "tiles_updated": tiles_updated})
+
+    def on_looks_reload(self, entity: int, attribute: str, value, source) -> None:
+        """`city_looks_reload` (write anything on the control entity): re-read looks.json and looks_overrides.json from disk (for
+        example after `city_appearance_ai.py generate` ran) and republish the tiles whose looks changed."""
+        if entity != self.control or not self.area_id:
+            return
+        with self.lock:
+            looks = self.looks
+            if looks is None:
+                return
+            area_dir = store.area_dir(self.area_id)
+            self.looks_doc = looks_lib.read_looks(os.path.join(area_dir, looks_lib.LOOKS_FILE))
+            self.looks_store = looks_lib.OverridesStore(os.path.join(area_dir, looks_lib.OVERRIDES_FILE))
+            looks.set_ai(self.looks_doc["units"], self.looks_doc)
+            looks.set_overrides(self.looks_store.data)
+            n = self.republish_looks(looks.ids)
+            self.world.set_attribute(self.control, "city_looks_ack", {"batch_id": value.get("batch_id") if isinstance(value, dict) else None, "accepted": 0, "rejected": [], "rejected_count": 0, "reload": True, "tiles_updated": n})
 
     # --- area requests ------------------------------------------------------------------------
 
@@ -506,6 +664,8 @@ def main():
         world.subscribe("city_area_request", city.on_area_request)
         world.subscribe("city_surface_patch", city.on_surface_patch)
         world.subscribe("city_building_changed", city.on_building_changed)
+        world.subscribe("city_looks_patch", city.on_looks_patch)
+        world.subscribe("city_looks_reload", city.on_looks_reload)
         world.subscribe("city_area_cancel", city.on_cancel)
         threading.Thread(target=city.worker, daemon=True).start()
         active = store.read_active()

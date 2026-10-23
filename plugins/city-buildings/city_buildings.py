@@ -36,6 +36,7 @@ import threading
 import time
 
 import agent_core
+import chat_store
 import city_agent
 import citydata_store as store
 from sotrice_client import World
@@ -163,6 +164,8 @@ def load_area_buildings(area: str):
 
 HISTORY_LIMIT = 100
 SLOT_KEYS = ("material", "colour", "source", "confidence")
+# move_parts: building_move_request may carry parts:[{entity,new_x,new_z}] (a split building moves as ONE undo step).
+CAPABILITIES = {"move_parts": True}
 
 
 class BuildingPublisher:
@@ -177,13 +180,20 @@ class BuildingPublisher:
         self.lock = threading.RLock()
         self.view_state: dict = {}            # latest `city_view_state` from the city view (what the user looks at)
         self.knowledge = None                 # city_agent.CityKnowledge for the active area
-        self.city_control = None              # city-data's control entity (surface patches / building_changed go there)
+        self.city_control = None              # city-data's control entity (surface patches / building_changed / area requests go there)
+        self.extra: dict = {}                 # entity -> {traffic_visits, nearest_road, road_distance_m} from economics-test
+        self.areas: list = []                 # `city_areas`: what the area picker offers (curated + cached), for the agent's switch_area
+        self.tally = city_agent.EntityTally() # live agent counts (walkers / vehicles ...) for the agent's context and count_entities
         self.entity_of_id: dict = {}          # legacy building id -> entity
         # Undo/redo: one step per edit command (a move, a field edit, one AI/voice command). Each change keeps the
         # building plus the overlay values / colour slots before and after, so both directions re-apply the same way.
         self.undo_stack: list = []
         self.redo_stack: list = []
         self.slot_cache: dict = {}            # surface_id -> last slot THIS plugin wrote (the surfaces on the building dict go stale)
+        # What this plugin version understands, for UIs that may be older or newer than it (plugins update independently).
+        # A UI only sends a request shape the plugin advertises here; without the attribute (old plugin) it falls back to
+        # the original one-request-per-part shape, which every version accepts.
+        world.set_attribute(self.control, "building_capabilities", CAPABILITIES)
 
     # --- publishing -------------------------------------------------------------------
 
@@ -291,6 +301,29 @@ class BuildingPublisher:
         if isinstance(value, dict):
             self.view_state = value
 
+    def on_economics(self, entity, attribute, value, source):
+        """economics-test's derived per-building numbers (traffic visits, nearest road), kept for the AI agent."""
+        key = {"building_traffic_visits_count": "traffic_visits", "building_nearest_road_name": "nearest_road", "building_road_distance_m": "road_distance_m"}.get(attribute)
+        if key and entity in self.building_by_entity:
+            self.extra.setdefault(entity, {})[key] = value
+
+    def building_extra(self, building: dict) -> dict:
+        return self.extra.get(self.entity_of_id.get(building["id"]), {})
+
+    def on_areas(self, entity, attribute, value, source):
+        if isinstance(value, list):
+            self.areas = [a for a in value if isinstance(a, dict) and a.get("id") and a.get("name")]
+            if self.city_control is None:
+                self.city_control = entity
+
+    def request_area(self, request: dict) -> str:
+        """The area picker's own request (city-data loads / downloads it and republishes everything). Returns at once:
+        a new area can take minutes to download, the city view shows the progress."""
+        if self.city_control is None:
+            raise RuntimeError("the city data plugin (city-data) is not running")
+        self.world.set_attribute(self.city_control, "city_area_request", {**request, "size_m": None})
+        return "area switch requested; the city view shows the progress"
+
     def on_dataset(self, entity, attribute, value, source):
         if not isinstance(value, dict) or value.get("status") != "ready":
             return
@@ -374,11 +407,8 @@ class BuildingPublisher:
                 for i in range(0, len(patches), 100):
                     self.world.set_attribute(self.city_control, "city_surface_patch", {"patches": patches[i:i + 100], "batch_id": f"history-{int(time.time() * 1000)}-{i}"})
 
-    def on_history_request(self, entity, attribute, value, source):
-        """The city view's Undo / Redo (Ctrl+Z / Ctrl+Y): {"action": "undo"|"redo", "nonce": any}."""
-        if not isinstance(value, dict):
-            return
-        action = value.get("action")
+    def history_action(self, action) -> tuple:
+        """Undo / redo one edit step. Shared by the city view's Ctrl+Z / Ctrl+Y and the AI agent. -> (ok, message)"""
         with self.lock:
             ok, message = False, "Nothing to " + str(action)
             if action == "undo" and self.undo_stack:
@@ -392,8 +422,15 @@ class BuildingPublisher:
                 self.undo_stack.append(step)
                 ok, message = True, "Redid: " + step["label"]
             self._publish_history()
-            self.world.set_attribute(self.control, "building_history_result", {"nonce": value.get("nonce"), "ok": ok, "message": message})
             print(f"[{self.name}] history {action}: {message}")
+            return ok, message
+
+    def on_history_request(self, entity, attribute, value, source):
+        """The city view's Undo / Redo (Ctrl+Z / Ctrl+Y): {"action": "undo"|"redo", "nonce": any}."""
+        if not isinstance(value, dict):
+            return
+        ok, message = self.history_action(value.get("action"))
+        self.world.set_attribute(self.control, "building_history_result", {"nonce": value.get("nonce"), "ok": ok, "message": message})
 
     # --- shared, validated apply paths (the AI agent uses these; the UI paths below keep their own handlers) ---
 
@@ -478,33 +515,49 @@ class BuildingPublisher:
     def on_move_request(self, entity, attribute, value, source):
         """Sandbox mode: rendering-test-ui writes this on a mouse drag-drop. The
         UI only shapes the request (new_x/new_z); this does the work and owns
-        persistence. Rigid translation only, no rotation."""
+        persistence. Rigid translation only, no rotation.
+
+        A building split into parts (Vienna: dozens of part entities) moves in ONE request: `parts` lists
+        [{"entity", "new_x", "new_z"}, ...] (the request's own new_x/new_z is the primary part, kept so a request
+        without `parts` works exactly as before). The whole move is ONE undo step, ONE overlay write and ONE batch of
+        attribute updates, so renderers rebuild the touched tiles once, not once per part."""
         if not isinstance(value, dict):
             return
+        moves = [(entity, value.get("new_x"), value.get("new_z"))]
+        parts = value.get("parts")
+        if isinstance(parts, list):
+            moves = [(p.get("entity"), p.get("new_x"), p.get("new_z")) for p in parts if isinstance(p, dict)] or moves
         with self.lock:
-            building = self.building_by_entity.get(entity)
-            if building is None:
+            changes, updates, seen = [], [], set()
+            for ent, new_x, new_z in moves:
+                building = self.building_by_entity.get(ent)
+                if building is None or ent in seen:
+                    continue
+                if not isinstance(new_x, (int, float)) or not isinstance(new_z, (int, float)):
+                    continue
+                seen.add(ent)
+                old = building["position"]
+                dx, dz = new_x - old["x"], new_z - old["z"]
+                new_position = {"x": new_x, "z": new_z}
+                new_footprint = [{"x": p["x"] + dx, "z": p["z"] + dz} for p in building["footprint"]]
+                if abs(dx) + abs(dz) > 0.01:
+                    changes.append({"building": building, "values": {"before": {"position": copy.deepcopy(old), "footprint": copy.deepcopy(building["footprint"])}, "after": {"position": copy.deepcopy(new_position), "footprint": copy.deepcopy(new_footprint)}}})
+                building["position"] = new_position
+                building["footprint"] = new_footprint
+                updates.append((ent, "building_position", {"x": new_x, "y": 0.0, "z": new_z}))
+                updates.append((ent, "building_footprint", new_footprint))
+                # Merge into whatever's already there: a previously voice-edited
+                # building that is now ALSO dragged must keep both sets of changes.
+                record = self.overlay.setdefault(building["id"], {})
+                record["position"] = new_position
+                record["footprint"] = new_footprint
+            if not updates:
                 return
-            new_x, new_z = value.get("new_x"), value.get("new_z")
-            if not isinstance(new_x, (int, float)) or not isinstance(new_z, (int, float)):
-                return
-            old = building["position"]
-            dx, dz = new_x - old["x"], new_z - old["z"]
-            new_position = {"x": new_x, "z": new_z}
-            new_footprint = [{"x": p["x"] + dx, "z": p["z"] + dz} for p in building["footprint"]]
-            if abs(dx) + abs(dz) > 0.01:
-                self._push_step("Move building", [{"building": building, "values": {"before": {"position": copy.deepcopy(old), "footprint": copy.deepcopy(building["footprint"])}, "after": {"position": copy.deepcopy(new_position), "footprint": copy.deepcopy(new_footprint)}}}])
-            building["position"] = new_position
-            building["footprint"] = new_footprint
-            self.world.set_attribute(entity, "building_position", {"x": new_x, "y": 0.0, "z": new_z})
-            self.world.set_attribute(entity, "building_footprint", new_footprint)
-            # Merge into whatever's already there: a previously voice-edited
-            # building that is now ALSO dragged must keep both sets of changes.
-            record = self.overlay.setdefault(building["id"], {})
-            record["position"] = new_position
-            record["footprint"] = new_footprint
+            self._push_step("Move building" if len(changes) <= 1 else f"Move building ({len(changes)} parts)", changes)
+            for i in range(0, len(updates), BATCH):
+                self.world.set_many(updates[i:i + BATCH])
             save_buildings_overlay(self.area, self.overlay)
-            print(f"[{self.name}] building {building['id']} (entity {entity}) moved to ({new_x:.1f}, {new_z:.1f}), persisted to overlay")
+            print(f"[{self.name}] moved {len(seen)} building part(s) in one request (first entity {moves[0][0]}), persisted to overlay")
 
     def on_edit_request(self, entity, attribute, value, source):
         """Voice/AI-driven single-building editing: the calling UI never writes
@@ -549,6 +602,12 @@ def main():
         world.subscribe("building_edit_request", pub.on_edit_request, replay=True)
         world.subscribe("building_history_request", pub.on_history_request)
         world.subscribe("city_dataset", pub.on_dataset, replay=True)
+        world.subscribe("city_areas", pub.on_areas, replay=True)
+        for attr in ("building_traffic_visits_count", "building_nearest_road_name", "building_road_distance_m"):
+            world.subscribe(attr, pub.on_economics, replay=True)
+        world.subscribe("agent_type", pub.tally.on_type, replay=True)
+        world.subscribe("vehicle_kind", pub.tally.on_kind, replay=True)
+        world.subscribe("agent_state", pub.tally.on_state, replay=True)
         world.subscribe("city_view_state", pub.on_view_state, replay=True)
         area = active_area()
         if not pub.load(area):
@@ -556,7 +615,7 @@ def main():
         # The city AI agent (agent_core.SpinAgent): sees only its allowlist (area aggregate + what the user looks at),
         # edits only through the validated paths above. Control entity = this plugin's own control entity.
         allowlist, context, tools, system = city_agent.make_agent_parts(pub)
-        agent = agent_core.SpinAgent(world, spin_id="city", label="City", allowlist=allowlist, context_provider=context, tools=tools, system_prompt=system, control_entity=pub.control)
+        agent = agent_core.SpinAgent(world, spin_id="city", label="City", allowlist=allowlist, context_provider=context, tools=tools, system_prompt=system, control_entity=pub.control, chats=chat_store.ChatStore(scope="city"))
         agent.start()
         print(f"[{name}] city agent ready: tools {sorted(agent.tools)}")
         try:

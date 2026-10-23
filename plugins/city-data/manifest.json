@@ -1,6 +1,6 @@
 {
   "type": "city-data",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Real city data for any place on Earth. Searches a place by name (Nominatim), downloads its OpenStreetMap roads, rail/subway/tram lines and stations, buildings, ground, POIs and terrain (Overpass mirrors with fallback + AWS terrain tiles), caches it per area (instant and offline the second time) and publishes it as schema-v1 city attributes: a control entity (city_dataset, city_progress, city_terrain, city_rail, city_road_graph, city_surfaces) plus one entity per 500 m tile (ct_roads, ct_buildings, ct_ground, ct_pois, ct_rail_ways). Area changes live via city_area_request / city_area_cancel; material overrides from the looks pipeline via city_surface_patch. Data (c) OpenStreetMap contributors, ODbL.",
   "concepts": [
     "CityData"

@@ -374,7 +374,22 @@ class World:
             message = self._push_queue.get()
             if message is None:  # connection closed, see _read_loop
                 break
+            barrier = message.get("_barrier")
+            if barrier is not None:  # see World.barrier(): everything queued before it has now been dispatched
+                barrier.set()
+                continue
             self._dispatch_push(message)
+
+    def barrier(self, timeout: float = 30.0) -> bool:
+        """Returns once every push the read loop has queued SO FAR has been delivered to its callbacks.
+
+        A `subscribe(..., replay=True)` is answered only after the server has sent all of its replay pushes (the
+        server orders the response behind them), so after it returns the replay is entirely in the queue; `barrier()`
+        then waits until the dispatch thread has run it. That makes "the replay is complete" a fact instead of a guess
+        with a timer. Never call it from inside a push callback (the dispatch thread would wait for itself)."""
+        done = threading.Event()
+        self._push_queue.put({"_barrier": done})
+        return done.wait(timeout)
 
     def _dispatch_push(self, message: dict[str, Any]) -> None:
         for handler in self._push_handlers.get(message.get("attribute", ""), []):

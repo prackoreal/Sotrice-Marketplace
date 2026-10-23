@@ -55,17 +55,24 @@ _BASE64_RE = re.compile(r"[A-Za-z0-9+/]*={0,2}")
 _IMAGE = frozenset({"image/png", "image/jpeg", "image/webp"})
 _AUDIO = frozenset({"audio/wav", "audio/mpeg", "audio/ogg"})
 
-# USD per 1M tokens (input, output). APPROXIMATE defaults (2026 snapshot,
-# unverified for Anthropic's 5.x line -> None = "tokens only, no estimate").
-# Users can override per model in Settings (ai_price_overrides).
+# USD per 1M tokens (input, output). Defaults; users can override per model in
+# Settings (ai_price_overrides). None = "tokens only, no estimate".
+# Verified 2026-10-22 against the official pricing pages:
+#   Anthropic: https://platform.claude.com/docs/en/about-claude/pricing
+#     (base input/output; Haiku 5.5 is the <=100k-token-prompt tier, 0.50/2.50
+#      above that; cache reads/writes not modelled)
+#   OpenAI: https://developers.openai.com/api/docs/pricing (standard tier;
+#     gpt-5.5 is the <272K-context rate)
+# Gemini rows are not re-verified here.
 DEFAULT_PRICES: dict[str, tuple[Optional[float], Optional[float]]] = {
     "gemini-3.1-flash-lite": (0.25, 1.50),
     "gemini-3.8-flash": (0.75, 3.75),
     "gpt-5.4-nano": (0.20, 1.25),
     "gpt-5.4-mini": (0.75, 4.50),
     "gpt-5.5": (5.00, 30.00),
-    "claude-haiku-5-5": (None, None),
-    "claude-sonnet-5-5": (None, None),
+    "claude-haiku-5-5": (0.10, 0.50),
+    "claude-sonnet-5-5": (2.00, 10.00),
+    "claude-opus-5-5": (4.00, 20.00),
 }
 
 PROVIDERS: dict[str, dict] = {

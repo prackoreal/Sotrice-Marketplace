@@ -303,9 +303,9 @@ class Settings:
             if changed:
                 self._persist()
 
-    def snapshot(self) -> dict:
+    def snapshot(self, provider: Optional[str] = None) -> dict:
         with self.lock:
-            p = self.provider
+            p = provider if provider in ap.PROVIDERS else self.provider
             return {
                 "provider": p,
                 "api_key": self.keys.get(p),
@@ -339,12 +339,68 @@ class Settings:
             self.on_change()
 
 
+class ReplayGate:
+    """An ai_request must be answered EXACTLY ONCE, even when ai-test restarts and Core replays every request that is
+    still sitting on its entity (each one would be billed again). Core is the source of truth: the previous instance's
+    ai_response is still on the same entity, so a replayed request whose request_id equals that entity's latest
+    response's request_id was already answered. Deterministic, no timer: `listen` subscribes to the responses first
+    and waits (World.barrier) until their replay has been fully dispatched, only then subscribes to the requests.
+    Until `go_live`, a delivered request is a replay. One without a request_id cannot be matched to a response: it is
+    answered unless a response already exists on its entity (then it is skipped to avoid billing twice); both cases
+    are logged. After `go_live`, requests are live and always answered."""
+
+    def __init__(self, start, log=print):
+        self._start = start
+        self._log = log
+        self._lock = threading.Lock()
+        self._live = False
+        self._answered: dict = {}      # entity -> request_id of the latest ai_response in Core (None-id responses count as {})
+        self._responded: set = set()   # entities that have any ai_response
+
+    def on_response(self, entity: int, _attribute: str, value: Any, _source: Optional[str]):
+        if isinstance(value, dict):
+            with self._lock:
+                self._responded.add(entity)
+                if value.get("request_id") is not None:
+                    self._answered[entity] = value["request_id"]
+
+    def on_request(self, entity: int, attribute: str, value: Any, source: Optional[str]):
+        with self._lock:
+            live = self._live
+            answered, responded = self._answered.get(entity), entity in self._responded
+        if not live and isinstance(value, dict):
+            rid = value.get("request_id")
+            if rid is not None and answered == rid:
+                self._log(f"[ai-test] skipped replayed ai_request {rid!r} on entity {entity}: already answered")
+                return
+            if rid is None:
+                if responded:
+                    self._log(f"[ai-test] skipped replayed ai_request without request_id on entity {entity}: the entity already has a response")
+                    return
+                self._log(f"[ai-test] answering replayed ai_request without request_id on entity {entity} (no response exists yet)")
+        self._start(entity, attribute, value, source)
+
+    def go_live(self):
+        with self._lock:
+            self._live = True
+
+    def listen(self, world):
+        """Subscribe in the only safe order (see the class doc)."""
+        world.subscribe("ai_response", self.on_response, replay=True)
+        world.barrier()
+        world.subscribe("ai_request", self.on_request, replay=True)
+        world.barrier()
+        self.go_live()
+
+
 def main():
     with World() as world:
         name = world.identify("ai-test")
         settings = Settings()
 
         control = world.create_entity()
+        published: dict = {}  # attribute -> json of the last value we wrote (see publish_state)
+        published_lock = threading.Lock()
 
         def publish_state():
             with settings.lock:
@@ -352,15 +408,25 @@ def main():
                 provider, bias = settings.provider, settings.cost_bias
                 models, base_urls = dict(settings.models), dict(settings.base_urls)
             configured = settings.configured()
-            world.set_many([
-                (control, "ai_provider", provider),
-                (control, "ai_provider_status", configured),
-                (control, "ai_api_key_configured", configured.get(provider, False)),
-                (control, "ai_cost_bias", bias),
-                (control, "ai_models", models),
-                (control, "ai_base_url", base_urls),
-                (control, "ai_usage", usage),
-            ])
+            # Publish only what CHANGED since the last publish. The control attributes are both state we publish and
+            # settings we read back (ai_provider ...), and a push cannot be told apart from a user's write (an
+            # anonymous writer is attributed to the entity owner). Re-publishing unchanged values meant two publishes
+            # in flight (a key save followed by a provider switch) echoed back as "user input" and ping-ponged the
+            # provider forever (seen live: gemini <-> anthropic, hundreds of flips per minute).
+            current = [
+                ("ai_provider", provider),
+                ("ai_provider_status", configured),
+                ("ai_api_key_configured", configured.get(provider, False)),
+                ("ai_cost_bias", bias),
+                ("ai_models", models),
+                ("ai_base_url", base_urls),
+                ("ai_usage", usage),
+            ]
+            with published_lock:
+                changed = [(control, name, value) for name, value in current if published.get(name) != json.dumps(value, sort_keys=True)]
+                published.update({name: json.dumps(value, sort_keys=True) for _c, name, value in changed})
+            if changed:
+                world.set_many(changed)
 
         settings.on_change = publish_state
         # A key written through Core would otherwise sit in the attribute
@@ -426,7 +492,7 @@ def main():
                 daemon=True,
             ).start()
 
-        world.subscribe("ai_request", handle_request, replay=True)
+        ReplayGate(handle_request).listen(world)
 
         try:
             while True:
@@ -466,6 +532,33 @@ def _test_provider(world: World, entity: int, settings: "Settings", provider: st
     world.set_attribute(entity, "ai_provider_test_result", {**result, "nonce": time.time()})
 
 
+def _is_audio(att: dict) -> bool:
+    return str(att.get("mime_type", "")).startswith("audio/")
+
+
+def _transcribe_if_needed(settings: "Settings", snap: dict, attachments: Optional[list[dict]], prompt: str):
+    """The chosen provider can't take audio (Claude, OpenAI chat, Ollama) but the user spoke: transcribe the clip with
+    another CONFIGURED provider that can (one cheap budget-model call), then continue with the transcript as text.
+    Returns (attachments, prompt, transcript|None). With no audio, or a provider that takes audio natively, nothing
+    changes; with no audio-capable provider configured the normal capability error ("switch to Gemini ...") surfaces."""
+    audio = [a for a in (attachments or []) if _is_audio(a)]
+    if not audio or ap.PROVIDERS[snap["provider"]]["capabilities"]["audio"]:
+        return attachments, prompt, None
+    configured = settings.configured()
+    helper = next((p for p, spec in ap.PROVIDERS.items() if spec["capabilities"]["audio"] and configured.get(p)), None)
+    if helper is None:
+        return attachments, prompt, None
+    hs = settings.snapshot(helper)
+    model = ap.resolve_model(helper, "simple", "cost", hs["models"])
+    heard = ap.generate(helper, hs["api_key"], model, "Transcribe this audio exactly as spoken, in the language spoken. Reply with only the transcript.", None, audio, None, None, None, hs["base_url"])
+    settings.record_usage(helper, model, heard["usage"], ap.estimate_cost_usd(model, heard["usage"], hs["prices"]))
+    text = (heard["text"] or "").strip()
+    if not text:
+        raise RuntimeError("I couldn't make out any speech in that recording.")
+    rest = [a for a in (attachments or []) if not _is_audio(a)]
+    return rest or None, f'{prompt}\n\nThe user said (transcribed from their voice): "{text}"', text
+
+
 def _answer_request(
     world: World,
     name: str,
@@ -484,8 +577,10 @@ def _answer_request(
     snap = settings.snapshot()
     provider = snap["provider"]
     model = ap.resolve_model(provider, task_hint, snap["cost_bias"], snap["models"])
+    transcript = None
 
     try:
+        attachments, prompt, transcript = _transcribe_if_needed(settings, snap, attachments, prompt)
         result = ap.generate(provider, snap["api_key"], model, prompt, context, attachments, tools, history, system, snap["base_url"])
     except (ValueError, RuntimeError) as exc:
         print(f"[{name}] {provider} call failed for entity {entity}: {exc}")
@@ -511,6 +606,8 @@ def _answer_request(
     }
     if result["tool_call"]:
         response["tool_call"] = result["tool_call"]
+    if transcript:
+        response["transcript"] = transcript
     world.set_attribute(entity, "ai_response", response)
 
 

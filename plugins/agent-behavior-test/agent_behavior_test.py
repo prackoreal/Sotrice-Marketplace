@@ -678,7 +678,9 @@ def main():
                         world.set_many(updates[i:i + 600])
                     if traffic.tick_no % 20 == 0:
                         world.set_attribute(guard_control, "agent_guard_stats", traffic.guards.stats.as_dict())
-                    time.sleep(max(0.0, 0.1 - (time.time() - tick_start)))
+                    # compute mode scales the publish rate (Efficiency ~5.5 Hz instead of 10 Hz): the renderer smooths positions, and every
+                    # push costs the viewer main-thread time to decode (LIVE: ~14 us per item on the reference laptop)
+                    time.sleep(max(0.0, compute.interval(0.1) - (time.time() - tick_start)))
                     continue
 
                 for agent_entity, agent_type in list(own_agents):

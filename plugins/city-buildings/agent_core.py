@@ -26,13 +26,21 @@ announced by a replayable `agent_ready` marker):
   agent_relay_request  {request_id, origin: "app-agent"|"user",
                         instruction, confirm?: bool}
   agent_relay_result   {request_id, status, summary, proposed_changes?,
-                        usage}
+                        usage, conversation?}
         status: "ok" | "proposed" | "rejected" | "error" | "skipped"
   agent_relay_decision {request_id, decision: "apply"|"skip"}
   agent_state          {state: "idle"|"thinking"|"waiting_confirmation",
                         pending}
 
 Instruction in, summary out — never raw context or raw tools across.
+
+Conversations (optional, when a ChatStore is given): a request may carry `conversation` (a chat id) — the last few
+turns of that chat ride along as `context.conversation`, and the finished turn is saved, so chats survive the window
+closing and an app restart. A request may carry `audio` ({mime_type, data_base64}) instead of text: the spoken
+instruction goes to the model as an attachment (one call does transcript + action; ai-test falls back to a
+transcription by another provider when the chosen one can't take audio). Chat management goes over
+`agent_chat_op` {op: "list"|"new"|"load"|"delete", id?, nonce} -> `agent_chats` [{id,title,updated,turns}] (the list,
+republished after every change) and `agent_chat` {nonce, id, turns} (the answer to load / new).
 
 Safety policy (one place, `requires_confirmation`): a request from the
 user typing INSIDE the spin (`origin == "user"`) applies directly; a
@@ -158,6 +166,21 @@ def requires_confirmation(origin: str, confirm_flag: Any) -> bool:
     return origin == "app-agent" and confirm_flag is not False
 
 
+def friendly_error(error: Any) -> str:
+    """A provider error (often "HTTP 503: {json...}") as one readable sentence for the chat."""
+    text = str(error)
+    body = text.split(":", 1)[1].strip() if text.startswith("HTTP ") and ":" in text else ""
+    try:
+        err = json.loads(body).get("error", {}) if body else {}
+    except ValueError:
+        err = {}
+    status = str(err.get("status") or "")
+    if text.startswith(("HTTP 503", "HTTP 429", "HTTP 529")) or status in ("UNAVAILABLE", "RESOURCE_EXHAUSTED"):
+        return "The AI service is busy or out of quota right now. Try again in a moment."
+    message = err.get("message") if isinstance(err, dict) else None
+    return (message or text)[:300]
+
+
 def _compact(value: Any) -> str:
     return json.dumps(value, separators=(",", ":"), sort_keys=True)
 
@@ -220,7 +243,9 @@ class SpinAgent:
         llm: Optional[Callable[[dict], dict]] = None,
         max_steps: int = DEFAULT_MAX_STEPS,
         control_entity: Optional[int] = None,
+        chats: Optional[Any] = None,
     ):
+        self.chats = chats
         self.world = world
         self.spin_id = spin_id
         self.label = label
@@ -232,6 +257,7 @@ class SpinAgent:
         self.control = control_entity
         self.llm = llm
         self._pending: dict[str, _Pending] = {}
+        self._turn_of: dict[str, tuple] = {}  # request_id -> (chat id, turn id) of a PROPOSED turn awaiting a decision
         self._seen: set[str] = set()
         self._lock = threading.Lock()
         self._cache: dict[str, tuple[float, dict]] = {}
@@ -249,6 +275,8 @@ class SpinAgent:
             self.world.subscribe("ai_response", llm.feed)
         self.world.subscribe("agent_relay_request", self._on_request)
         self.world.subscribe("agent_relay_decision", self._on_decision)
+        if self.chats is not None:
+            self.world.subscribe("agent_chat_op", self._on_chat_op)
         self.world.set_many([
             (self.control, "agent_state", {"state": "idle", "pending": 0}),
             (self.control, "agent_ready", {
@@ -256,8 +284,10 @@ class SpinAgent:
                 "label": self.label,
                 "tools": sorted(self.tools),
                 "sees": self.allowlist.describe(),
+                "chats": self.chats is not None,
             }),
         ])
+        self.publish_chats()
         return self.control
 
     def _on_request(self, entity: int, _attr: str, value: Any, _source: Optional[str]) -> None:
@@ -277,6 +307,48 @@ class SpinAgent:
             return
         threading.Thread(target=self.decide, args=(value.get("request_id"), value.get("decision")), daemon=True).start()
 
+    # --- chats ---------------------------------------------------------
+
+    def publish_chats(self) -> None:
+        if self.chats is not None:
+            self.world.set_attribute(self.control, "agent_chats", self.chats.list_chats())
+
+    def _on_chat_op(self, entity: int, _attr: str, value: Any, _source: Optional[str]) -> None:
+        if entity != self.control or not isinstance(value, dict) or self.chats is None:
+            return
+        threading.Thread(target=self.chat_op, args=(value,), daemon=True).start()
+
+    def chat_op(self, value: dict) -> None:
+        op, nonce, chat_id = value.get("op"), value.get("nonce"), value.get("id")
+        if op == "list":
+            self.publish_chats()
+        elif op == "new":
+            # No file until the first turn is saved: an empty chat never clutters the history list.
+            self.world.set_attribute(self.control, "agent_chat", {"nonce": nonce, "id": self.chats.new_id(), "turns": []})
+        elif op == "load":
+            chat = self.chats.load(chat_id) if isinstance(chat_id, str) else None
+            self.world.set_attribute(self.control, "agent_chat", {"nonce": nonce, "id": chat_id, "turns": (chat or {}).get("turns", []), "missing": chat is None})
+        elif op == "delete":
+            if isinstance(chat_id, str):
+                self.chats.delete(chat_id)
+            self.publish_chats()
+
+    def _save_turn(self, request: dict, request_id: str, instruction: str, result: dict) -> None:
+        chat_id = request.get("conversation")
+        if self.chats is None or not isinstance(chat_id, str):
+            return
+        try:
+            stored = self.chats.append(chat_id, {
+                "id": request_id, "q": "" if request.get("audio") else instruction, "a": result.get("summary"),
+                "status": result.get("status"), "usage": result.get("usage"), "voice": bool(request.get("audio")),
+            })
+            if result.get("status") == "proposed":
+                self._turn_of[request_id] = (chat_id, request_id)
+            if stored:
+                self.publish_chats()
+        except Exception as exc:  # history is a convenience: never let it break an answer
+            print(f"[agent_core] could not save chat turn: {exc!r}")
+
     # --- publishing ----------------------------------------------------
 
     def _set_state(self, state: str) -> None:
@@ -294,33 +366,50 @@ class SpinAgent:
         instruction = request.get("instruction")
         if origin not in ORIGINS:
             return self._publish({"request_id": request_id, "status": "rejected", "summary": "unknown origin"})
-        if not isinstance(instruction, str) or not instruction.strip():
+        audio = request.get("audio")
+        if audio is not None and not (isinstance(audio, dict) and isinstance(audio.get("data_base64"), str) and isinstance(audio.get("mime_type"), str)):
+            return self._publish({"request_id": request_id, "status": "rejected", "summary": "bad audio attachment"})
+        if not audio and (not isinstance(instruction, str) or not instruction.strip()):
             return self._publish({"request_id": request_id, "status": "rejected", "summary": "empty instruction"})
-        instruction = instruction.strip()[:MAX_INSTRUCTION_CHARS]
+        instruction = instruction.strip()[:MAX_INSTRUCTION_CHARS] if isinstance(instruction, str) else ""
         confirm = requires_confirmation(origin, request.get("confirm"))
+        conversation = request.get("conversation") if isinstance(request.get("conversation"), str) else None
 
         self._set_state("thinking")
         try:
-            result = self._run(request_id, instruction, confirm)
+            result = self._run(request_id, instruction, confirm, audio, conversation)
         except Exception as exc:  # a crash must never leave the agent "thinking"
             result = {"request_id": request_id, "status": "error", "summary": f"agent failed: {exc}"}
+        if conversation:
+            result["conversation"] = conversation
+        self._save_turn(request, request_id, instruction, result)
         self._set_state("waiting_confirmation" if self._pending else "idle")
         return self._publish(result)
 
-    def _run(self, request_id: str, instruction: str, confirm: bool) -> dict:
+    def _run(self, request_id: str, instruction: str, confirm: bool, audio: Optional[dict] = None, conversation: Optional[str] = None) -> dict:
         context = self.allowlist.enforce(self.context_provider(instruction))
-        cache_key = _compact([instruction, context, confirm])
-        cached = self._cache.get(cache_key)
+        if self.chats is not None and conversation:
+            recent = self.chats.recent_context(conversation)
+            if recent:
+                context["conversation"] = recent  # earlier turns of THIS chat only (a new chat starts empty)
+        cache_key = None if audio else _compact([instruction, context, confirm])
+        cached = self._cache.get(cache_key) if cache_key else None
         if cached and time.monotonic() - cached[0] < CACHE_TTL_S:
             return {**cached[1], "request_id": request_id, "usage": {"requests": 0, "tokens": 0, "cached": True}}
 
         system = self.system_prompt + (
             " Changes you make with tools are only PROPOSED for the user to confirm: describe them as proposed, not as done."
             if confirm else ""
+        ) + (
+            " context.conversation holds the earlier turns of this chat (q = user, a = you): resolve 'it', 'that one', 'and the other?' from it."
+            if context.get("conversation") else ""
+        ) + (
+            ' The user SPOKE: the instruction is the attached audio. Start your final reply with Heard: "<what they said>" on its own line.'
+            if audio else ""
         )
         schemas = [t.schema() for t in self.tools.values()]
         history: list[dict] = []
-        usage = {"requests": 0, "tokens": 0}
+        usage: dict = {"requests": 0, "tokens": 0}
         plans: list[Plan] = []
         descriptions: list[str] = []
         applied: list[str] = []
@@ -328,10 +417,11 @@ class SpinAgent:
         escalated = False
         consecutive_failures = 0
         final_text: Optional[str] = None
+        heard: Optional[str] = None
 
         for step in range(self.max_steps):
             request = {
-                "prompt": instruction,
+                "prompt": instruction or "The user's instruction is the attached audio recording.",
                 "context": context,
                 "request_id": f"{self._prefix}-{request_id}-{step}",
                 "task_hint": "complex" if escalated else "simple",
@@ -340,14 +430,28 @@ class SpinAgent:
             }
             if history:
                 request["history"] = history
+            if audio:
+                request["attachments"] = [{"mime_type": audio["mime_type"], "data_base64": audio["data_base64"]}]
             response = self.llm(request)
             usage["requests"] += 1
             usage["tokens"] += int((response.get("usage") or {}).get("total") or 0)
+            if isinstance(response.get("cost_usd"), (int, float)):
+                usage["cost_usd"] = round(usage.get("cost_usd", 0.0) + response["cost_usd"], 6)
+            if audio and response.get("transcript"):
+                # ai-test transcribed the clip with another provider: from here on it is plain text (no audio re-sent).
+                heard = str(response["transcript"])
+                instruction, audio = f'The user said (spoken): "{heard}"', None
             if response.get("error"):
                 if not escalated and step == 0 and "empty response" in str(response["error"]):
                     escalated = True  # budget model gave nothing usable
                     continue
-                return {"request_id": request_id, "status": "error", "summary": str(response["error"]), "usage": usage}
+                message = friendly_error(response["error"])
+                if applied or descriptions:
+                    # A change already happened (or was proposed): never hide it behind the model failing to word the reply.
+                    done = "; ".join(applied or descriptions)
+                    final_text = f"{'Done' if applied else 'Proposed'}: {done}. (I couldn't write the reply: {message})"
+                    break
+                return {"request_id": request_id, "status": "error", "summary": message, "usage": usage}
             call = response.get("tool_call")
             if not call:
                 final_text = (response.get("text") or "").strip()
@@ -387,6 +491,8 @@ class SpinAgent:
             parts = applied or descriptions
             final_text = ("; ".join(parts) if parts else "I could not finish that within the step limit.")
 
+        if heard and not final_text.lstrip().lower().startswith("heard"):
+            final_text = f'Heard: "{heard}"\n{final_text}'
         self.totals["requests"] += usage["requests"]
         self.totals["tokens"] += usage["tokens"]
         result_out: dict = {"request_id": request_id, "summary": final_text, "usage": usage}
@@ -401,7 +507,8 @@ class SpinAgent:
             result_out["status"] = "rejected"
         else:
             result_out["status"] = "ok"
-            self._cache[cache_key] = (time.monotonic(), {k: v for k, v in result_out.items() if k not in ("request_id", "usage")})
+            if cache_key:
+                self._cache[cache_key] = (time.monotonic(), {k: v for k, v in result_out.items() if k not in ("request_id", "usage")})
         return result_out
 
     # --- the confirm path ----------------------------------------------
@@ -413,6 +520,7 @@ class SpinAgent:
             return None  # unknown / already decided: idempotent no-op
         if decision != "apply":
             self._set_state("waiting_confirmation" if self._pending else "idle")
+            self._amend(request_id, "skipped", "Skipped — nothing was changed.")
             return self._publish({"request_id": request_id, "status": "skipped", "summary": "Skipped — nothing was changed."})
         done: list[str] = []
         errors: list[str] = []
@@ -424,8 +532,19 @@ class SpinAgent:
                 errors.append(f"{plan.description}: {exc}")
         self._set_state("waiting_confirmation" if self._pending else "idle")
         if errors and not done:
+            self._amend(request_id, "rejected", "Could not apply: " + "; ".join(errors))
             return self._publish({"request_id": request_id, "status": "rejected", "summary": "Could not apply: " + "; ".join(errors)})
         summary = "Applied: " + "; ".join(done)
         if errors:
             summary += " (failed: " + "; ".join(errors) + ")"
+        self._amend(request_id, "ok", summary)
         return self._publish({"request_id": request_id, "status": "ok", "summary": summary})
+
+    def _amend(self, request_id: str, status: str, summary: str) -> None:
+        """A proposed turn was decided: the saved chat should say what actually happened, not 'proposed'."""
+        ref = self._turn_of.pop(request_id, None)
+        if ref and self.chats is not None:
+            try:
+                self.chats.amend(ref[0], ref[1], summary, status)
+            except Exception as exc:
+                print(f"[agent_core] could not amend chat turn: {exc!r}")
