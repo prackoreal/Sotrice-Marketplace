@@ -179,18 +179,6 @@
       "depends_on": [],
       "author": "sotrice-core-design",
       "file": "city-data.spin"
-    },
-    {
-      "type": "light-lab",
-      "version": "0.1.0",
-      "description": "Light Lab: Laszlo's stateful light memory, shown on one leaf. Every surface texel (an anchor) remembers its light: a soft-sun visibility (the real 0.53 degree solar disk) and the indirect light from sky, bounces between leaf, twig and ground, and light transmitted through the leaf. The memory is path-traced progressively in a Web Worker, converges, then sleeps; the renderer samples it per pixel, so frame rate and light update rate are decoupled. Move the date/time slider and the memory re-converges from its previous state; drag the upper leaf and only the anchors whose light actually changes wake up. Fully offline: three.js is bundled, no network.",
-      "concepts": [
-        "LightLab"
-      ],
-      "depends_on": [],
-      "author": "prackoreal",
-      "file": "light-lab.spin",
-      "category": "Shared utility"
     }
   ],
   "packages": [
